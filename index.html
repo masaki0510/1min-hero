@@ -85,7 +85,7 @@
     font-size: 1.4em; font-weight: bold; color: var(--accent);
     opacity: 0; pointer-events: none;
   }
-  .hit-fx.show { animation: pop 0.35s ease-out; }
+  .hit-fx.show { animation: pop var(--hitfx-dur, 0.35s) ease-out; }
   @keyframes pop {
     0% { opacity: 1; transform: translate(-50%,-50%) scale(0.6); }
     60% { opacity: 1; transform: translate(-50%,-80%) scale(1.15); }
@@ -377,8 +377,10 @@
       const currentHit = Math.floor(elapsed / hitInterval);
       if (currentHit !== hitCount) {
         hitCount = currentHit;
-        // 偶数打目は勇者側のモーションを挟み、攻防の応酬に見せる
-        pulse(hitCount % 2 === 0 ? heroHit : enemyHit);
+        // 偶数打目は勇者側のモーションを挟み、攻防の応酬に見せる。
+        // アニメーション時間はヒット間隔より必ず短くし、次のヒットが
+        // 来る前に完走させる(#17: 魔王戦の高速ヒットでの重なり対策)。
+        pulse(hitCount % 2 === 0 ? heroHit : enemyHit, Math.min(hitInterval * 0.85, 350));
       }
 
       // 残り時間が少なく、まだ倒しきれていない場合はタイマーを警告色にする
@@ -411,9 +413,12 @@
     rafId = requestAnimationFrame(frame);
   }
 
-  function pulse(el) {
+  function pulse(el, durationMs) {
     el.classList.remove("show");
     void el.offsetWidth;
+    if (durationMs) {
+      el.style.setProperty("--hitfx-dur", `${durationMs}ms`);
+    }
     el.classList.add("show");
   }
 
