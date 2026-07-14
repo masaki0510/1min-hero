@@ -88,6 +88,7 @@
   /* --- Result screen --- */
   #result-screen { display: none; }
   #result-title { font-size: 1.5em; font-weight: bold; }
+  #result-rarity { font-size: 0.9em; color: var(--accent); font-weight: bold; }
   #result-detail { color: #cfd3ff; font-size: 0.95em; line-height: 1.6; max-width: 340px; }
   #result-stats { font-size: 0.8em; color: #8b90b8; }
   .rank-common { color: var(--common); }
@@ -133,6 +134,7 @@
 
   <div id="result-screen">
     <div id="result-title">-</div>
+    <div id="result-rarity">-</div>
     <div id="result-detail">-</div>
     <div id="result-stats">-</div>
     <button class="primary" id="retry-btn">もう一度運命を引く</button>
@@ -388,19 +390,56 @@
     return talentScore <= state.luck ? "talent" : "luck";
   }
 
+  // 面タイプ(normal/big/demon)×敗因(talent/luck/both)の組み合わせテキスト。
+  // 「今回はこういう運命だった」と納得させる質を狙い、Shorts的などうでもよさにしない。
   const LOSS_TEXTS = {
-    talent: [
-      "才能が育たず、成長が追いつかなかった。",
-      "レベルアップの伸びが鈍く、力及ばず。",
-    ],
-    luck: [
-      "運に恵まれず、装備が最後まで育たなかった。",
-      "ろくな装備を引けないまま、力尽きた。",
-    ],
-    both: [
-      "才能も運も味方せず、なすすべがなかった。",
-    ],
+    normal: {
+      talent: [
+        "駆け出しの雑魚相手にすら、成長が追いつかなかった。幸先の悪い運命だった。",
+        "才能の伸びが鈍く、序盤の敵にすら手こずったまま終わった。",
+      ],
+      luck: [
+        "ろくな装備も引けないまま、序盤の敵に沈んだ。運に見放された滑り出し。",
+        "装備が育つ前に、呆気なく終わってしまった。",
+      ],
+      both: [
+        "才能も運も味方せず、雑魚相手にすらなすすべがなかった。大ハズレの運命。",
+      ],
+    },
+    big: {
+      talent: [
+        "大ボスの猛攻に、成長速度が最後まで追いつかなかった。",
+        "レベルは上がっていたが、大ボスの壁を越えるには足りなかった。",
+      ],
+      luck: [
+        "大ボスを前に、装備の運が最後まで開花しなかった。",
+        "もう一段上の装備さえ引ければ……という所で、運が尽きた。",
+      ],
+      both: [
+        "才能も運も噛み合わないまま、大ボスの壁に阻まれた。",
+      ],
+    },
+    demon: {
+      talent: [
+        "魔王の間合いにまで辿り着きながら、才能の伸びがわずかに足りなかった。惜しい運命だった。",
+        "あと少しレベルが高ければ——そう思わせる形で、魔王に届かなかった。",
+      ],
+      luck: [
+        "魔王の一歩手前まで来ながら、最後の装備運に見放された。",
+        "ここまで来られたのは大したものだが、運が最後の一押しをくれなかった。",
+      ],
+      both: [
+        "魔王の前に立ちながら、才能にも運にも見放された。それでもここまで来られたのは事実だ。",
+      ],
+    },
   };
+
+  const RARITY_BY_STAGE_TYPE = {
+    normal: { label: "大ハズレ", note: "序盤で力尽きた回。次はもう少し粘れるはず。" },
+    big: { label: "普通", note: "中盤の壁で力尽きた回。まずまずの結果。" },
+    demon: { label: "レア", note: "魔王の前まで辿り着いた回。かなりの当たり枠。" },
+  };
+  const RARITY_CLEARED = { label: "激レア", note: "魔王を撃破した、最高の運命。" };
 
   function finishRun(cleared, failedStage) {
     cancelAnimationFrame(rafId);
@@ -410,15 +449,19 @@
     const title = $("result-title");
     const detail = $("result-detail");
     const stats = $("result-stats");
+    const rarity = $("result-rarity");
 
     if (cleared) {
       title.textContent = "世界は救われた";
       detail.textContent = "魔王を打ち倒し、1分で世界を救った。今回は最高の運命だった。";
+      rarity.textContent = `【${RARITY_CLEARED.label}】${RARITY_CLEARED.note}`;
     } else {
-      const causeTexts = LOSS_TEXTS[state.lastCause];
+      const causeTexts = LOSS_TEXTS[failedStage.type][state.lastCause];
       const text = causeTexts[Math.floor(Math.random() * causeTexts.length)];
+      const r = RARITY_BY_STAGE_TYPE[failedStage.type];
       title.textContent = `${state.reachedLabel}で力尽きた`;
       detail.textContent = text;
+      rarity.textContent = `【${r.label}】${r.note}`;
     }
 
     stats.textContent = `才能 ${state.talent.toFixed(2)}x / 運 ${(state.luck * 100).toFixed(0)} / Lv${state.level} / 最終装備:${state.gear.rank}`;
