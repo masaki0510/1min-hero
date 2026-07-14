@@ -98,21 +98,10 @@
     50% { transform: translateY(-4px); }
   }
   /* ⑮ 勇者の攻撃モーション・敵の被弾リアクション。
-     idle-bobと同時に走らせると transform が競合するため、id+.show の
-     組み合わせで一時的にアイドルアニメーションを上書きする。 */
-  #hero-stick.show { animation: hero-swing var(--hitfx-dur, 0.25s) ease-out; }
-  @keyframes hero-swing {
-    0% { transform: translateX(0) rotate(0deg); }
-    35% { transform: translateX(10px) rotate(-22deg); }
-    100% { transform: translateX(0) rotate(0deg); }
-  }
-  #enemy-icon.show { animation: enemy-flinch var(--hitfx-dur, 0.25s) ease-out; }
-  @keyframes enemy-flinch {
-    0% { transform: translateX(0) rotate(0deg); }
-    30% { transform: translateX(-6px) rotate(6deg); }
-    65% { transform: translateX(3px) rotate(-3deg); }
-    100% { transform: translateX(0) rotate(0deg); }
-  }
+     idle-bobと同時に走らせると transform が競合するが、JS側で
+     element.animate()(Web Animations API)を使って一時的に上書きする
+     ため、ここにCSSアニメーション定義は不要(#29: 対応するキーフレームは
+     JS内のHIT_ANIM_KEYFRAMESにまとめてある)。 */
   .gear-icon {
     position: absolute; top: 4px; right: -6px; font-size: 20px;
     filter: drop-shadow(0 0 3px rgba(0,0,0,0.6));
@@ -126,23 +115,11 @@
     font-size: 1.4em; font-weight: bold; color: var(--accent);
     opacity: 0; pointer-events: none;
   }
-  .hit-fx.show { animation: pop var(--hitfx-dur, 0.35s) ease-out; }
-  @keyframes pop {
-    0% { opacity: 1; transform: translate(-50%,-50%) scale(0.6); }
-    60% { opacity: 1; transform: translate(-50%,-80%) scale(1.15); }
-    100% { opacity: 0; transform: translate(-50%,-110%) scale(1.1); }
-  }
   .dmg-fx {
     position: absolute; top: 20%; left: 65%; transform: translate(-50%,-50%);
     font-size: 1em; font-weight: bold; color: #fff;
     text-shadow: 0 1px 3px rgba(0,0,0,0.7);
     opacity: 0; pointer-events: none;
-  }
-  .dmg-fx.show { animation: dmg-pop var(--hitfx-dur, 0.35s) ease-out; }
-  @keyframes dmg-pop {
-    0% { opacity: 1; transform: translate(-50%,-50%) scale(0.8); }
-    50% { opacity: 1; transform: translate(-50%,-90%) scale(1); }
-    100% { opacity: 0; transform: translate(-50%,-120%) scale(0.95); }
   }
   /* ㉑ クリティカル倍率が高いほど、装備レアリティと同じ色調で目立たせる。
      「運が効く場所」として装備ドロップと視覚的な語彙を揃える狙い。 */
@@ -156,25 +133,11 @@
     opacity: 0; pointer-events: none;
     text-shadow: 0 0 8px rgba(255, 93, 93, 0.9);
   }
-  .crit-fx.show { animation: crit-pop 0.7s ease-out; }
-  @keyframes crit-pop {
-    0% { opacity: 0; transform: translate(-50%, 6px) scale(0.6) rotate(-4deg); }
-    25% { opacity: 1; transform: translate(-50%, -8px) scale(1.25) rotate(3deg); }
-    70% { opacity: 1; transform: translate(-50%, -8px) scale(1.05) rotate(0deg); }
-    100% { opacity: 0; transform: translate(-50%, -20px) scale(1) rotate(0deg); }
-  }
   .levelup-fx {
     position: absolute; top: -18px; left: 50%; transform: translate(-50%, 0);
     font-size: 0.85em; font-weight: bold; color: var(--legend);
     white-space: nowrap; opacity: 0; pointer-events: none;
     text-shadow: 0 0 6px rgba(255, 209, 102, 0.8);
-  }
-  .levelup-fx.show { animation: levelup-pop 0.9s ease-out; }
-  @keyframes levelup-pop {
-    0% { opacity: 0; transform: translate(-50%, 10px) scale(0.7); }
-    20% { opacity: 1; transform: translate(-50%, -6px) scale(1.1); }
-    75% { opacity: 1; transform: translate(-50%, -6px) scale(1); }
-    100% { opacity: 0; transform: translate(-50%, -18px) scale(1); }
   }
   /* ⑭ 装備ランクアップ演出。レベルアップ演出(-18px)とかぶらないよう
      さらに上の位置に出す。色は装備ランクに応じてJS側で差し替える。 */
@@ -183,19 +146,6 @@
     font-size: 0.8em; font-weight: bold; white-space: nowrap;
     opacity: 0; pointer-events: none;
     text-shadow: 0 0 6px rgba(0,0,0,0.7);
-  }
-  .gear-toast.show { animation: levelup-pop 1s ease-out; }
-  .gear-icon.show { animation: gear-bounce 0.5s ease-out; }
-  @keyframes gear-bounce {
-    0% { transform: scale(0.4) rotate(-25deg); opacity: 0; }
-    50% { transform: scale(1.4) rotate(8deg); opacity: 1; }
-    100% { transform: scale(1) rotate(0deg); opacity: 1; }
-  }
-  .aura.show { animation: aura-flash 0.6s ease-out; }
-  @keyframes aura-flash {
-    0% { opacity: 0.55; filter: blur(14px); }
-    40% { opacity: 1; filter: blur(20px); }
-    100% { opacity: 0.55; filter: blur(14px); }
   }
   #status-bar {
     display: flex; justify-content: space-around; font-size: 0.75em; color: #b9bde8;
@@ -541,15 +491,15 @@
         enemyDmg.textContent = `-${shownDamage}`;
         enemyDmg.className = `dmg-fx ${crit.mult > 1 ? "crit-" + crit.key : ""}`;
         const fxDuration = Math.min(hitInterval * 0.85, 350);
-        pulse(enemyDmg, fxDuration);
+        pulse(enemyDmg, fxDuration, "dmgPop");
         // 偶数打目は勇者側のモーションを挟み、攻防の応酬に見せる。
         // アニメーション時間はヒット間隔より必ず短くし、次のヒットが
         // 来る前に完走させる(#17: 魔王戦の高速ヒットでの重なり対策)。
-        pulse(hitCount % 2 === 0 ? heroHit : enemyHit, fxDuration);
+        pulse(hitCount % 2 === 0 ? heroHit : enemyHit, fxDuration, "pop");
         // ⑮ 実際のダメージは毎ヒット発生するため、勇者の振りかぶり・
         // 敵の被弾リアクションは「!」演出とは独立して毎ヒット発火する。
-        pulse(heroStick, fxDuration);
-        pulse(enemyIcon, fxDuration);
+        pulse(heroStick, fxDuration, "heroSwing");
+        pulse(enemyIcon, fxDuration, "enemyFlinch");
         // ㉑ 最上位クリティカル(5倍)だけは「会心の一撃!」として特別扱いする
         if (crit.mult >= 5) showCritical();
       }
@@ -598,15 +548,13 @@
   // ⑱ レベルアップの瞬間だけは、成長の手応えとして目立つ演出を入れる。
   // 頻繁に起きるヒット演出とは別枠にし、控えめな他の演出とのメリハリをつける。
   function showLevelUp() {
-    heroLevelUp.classList.remove("show");
-    void heroLevelUp.offsetWidth;
-    heroLevelUp.classList.add("show");
+    pulse(heroLevelUp, 900, "levelupPop");
   }
 
   // ㉑ 最上位クリティカル(5倍)だけの特別演出。装備のレジェンダリー同様、
   // 最も重み(確率)が低い枠なので、専用の派手さで「引いた」感を出す。
   function showCritical() {
-    pulse(critFx, 700);
+    pulse(critFx, 700, "critPop");
   }
 
   // ⑭ 装備がランクアップした瞬間だけ演出する。ランクアップしなかった
@@ -614,18 +562,71 @@
   function showGearUpgrade(gear) {
     gearToast.textContent = `装備ドロップ! ${gear.rank}を手に入れた`;
     gearToast.className = `gear-toast ${RANK_CLASS[gear.key]}`;
-    pulse(gearToast, 1000);
-    pulse(heroGearIcon, 500);
-    pulse(heroAura, 600);
+    pulse(gearToast, 1000, "levelupPop");
+    pulse(heroGearIcon, 500, "gearBounce");
+    pulse(heroAura, 600, "auraFlash");
   }
 
-  function pulse(el, durationMs) {
-    el.classList.remove("show");
-    void el.offsetWidth;
-    if (durationMs) {
-      el.style.setProperty("--hitfx-dur", `${durationMs}ms`);
-    }
-    el.classList.add("show");
+  // #29: 高速ヒット時(魔王戦は毎秒最大約6ヒット)、1ヒットあたり最大4要素に
+  // pulse()を呼ぶと、従来の classList.remove → offsetWidth読み取り(強制
+  // リフロー)→ add という実装では強制リフローが多発しメインスレッドを
+  // 圧迫していた。Web Animations API の element.animate() はレイアウトを
+  // 強制せずに新しいアニメーションインスタンスを生成できるため、同名
+  // アニメーションの多重起動(=前のアニメーションのキャンセルと再始動)を
+  // 強制リフローなしで行える。
+  const HIT_ANIM_KEYFRAMES = {
+    pop: [
+      { opacity: 1, transform: "translate(-50%,-50%) scale(0.6)", offset: 0 },
+      { opacity: 1, transform: "translate(-50%,-80%) scale(1.15)", offset: 0.6 },
+      { opacity: 0, transform: "translate(-50%,-110%) scale(1.1)", offset: 1 },
+    ],
+    dmgPop: [
+      { opacity: 1, transform: "translate(-50%,-50%) scale(0.8)", offset: 0 },
+      { opacity: 1, transform: "translate(-50%,-90%) scale(1)", offset: 0.5 },
+      { opacity: 0, transform: "translate(-50%,-120%) scale(0.95)", offset: 1 },
+    ],
+    heroSwing: [
+      { transform: "translateX(0) rotate(0deg)", offset: 0 },
+      { transform: "translateX(10px) rotate(-22deg)", offset: 0.35 },
+      { transform: "translateX(0) rotate(0deg)", offset: 1 },
+    ],
+    enemyFlinch: [
+      { transform: "translateX(0) rotate(0deg)", offset: 0 },
+      { transform: "translateX(-6px) rotate(6deg)", offset: 0.3 },
+      { transform: "translateX(3px) rotate(-3deg)", offset: 0.65 },
+      { transform: "translateX(0) rotate(0deg)", offset: 1 },
+    ],
+    critPop: [
+      { opacity: 0, transform: "translate(-50%,6px) scale(0.6) rotate(-4deg)", offset: 0 },
+      { opacity: 1, transform: "translate(-50%,-8px) scale(1.25) rotate(3deg)", offset: 0.25 },
+      { opacity: 1, transform: "translate(-50%,-8px) scale(1.05) rotate(0deg)", offset: 0.7 },
+      { opacity: 0, transform: "translate(-50%,-20px) scale(1) rotate(0deg)", offset: 1 },
+    ],
+    levelupPop: [
+      { opacity: 0, transform: "translate(-50%,10px) scale(0.7)", offset: 0 },
+      { opacity: 1, transform: "translate(-50%,-6px) scale(1.1)", offset: 0.2 },
+      { opacity: 1, transform: "translate(-50%,-6px) scale(1)", offset: 0.75 },
+      { opacity: 0, transform: "translate(-50%,-18px) scale(1)", offset: 1 },
+    ],
+    gearBounce: [
+      { transform: "scale(0.4) rotate(-25deg)", opacity: 0, offset: 0 },
+      { transform: "scale(1.4) rotate(8deg)", opacity: 1, offset: 0.5 },
+      { transform: "scale(1) rotate(0deg)", opacity: 1, offset: 1 },
+    ],
+    auraFlash: [
+      { opacity: 0.55, filter: "blur(14px)", offset: 0 },
+      { opacity: 1, filter: "blur(20px)", offset: 0.4 },
+      { opacity: 0.55, filter: "blur(14px)", offset: 1 },
+    ],
+  };
+
+  function pulse(el, durationMs, kind) {
+    if (el._pulseAnim) el._pulseAnim.cancel();
+    el._pulseAnim = el.animate(HIT_ANIM_KEYFRAMES[kind], {
+      duration: durationMs || 350,
+      easing: "ease-out",
+      fill: "none",
+    });
   }
 
   /* =========================================================
