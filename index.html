@@ -91,6 +91,18 @@
     60% { opacity: 1; transform: translate(-50%,-80%) scale(1.15); }
     100% { opacity: 0; transform: translate(-50%,-110%) scale(1.1); }
   }
+  .dmg-fx {
+    position: absolute; top: 20%; left: 65%; transform: translate(-50%,-50%);
+    font-size: 1em; font-weight: bold; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+    opacity: 0; pointer-events: none;
+  }
+  .dmg-fx.show { animation: dmg-pop var(--hitfx-dur, 0.35s) ease-out; }
+  @keyframes dmg-pop {
+    0% { opacity: 1; transform: translate(-50%,-50%) scale(0.8); }
+    50% { opacity: 1; transform: translate(-50%,-90%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%,-120%) scale(0.95); }
+  }
   .levelup-fx {
     position: absolute; top: -18px; left: 50%; transform: translate(-50%, 0);
     font-size: 0.85em; font-weight: bold; color: var(--legend);
@@ -150,6 +162,7 @@
       <div class="fighter" id="enemy">
         <span class="stick" id="enemy-icon">👹</span>
         <div class="hit-fx" id="enemy-hit">!</div>
+        <div class="dmg-fx" id="enemy-dmg"></div>
         <div class="name-tag" id="enemy-tag">-</div>
         <div class="hpbar-wrap"><div class="hpbar" id="enemy-hp"></div></div>
       </div>
@@ -289,6 +302,7 @@
   const enemyIcon = $("enemy-icon");
   const heroHit = $("hero-hit");
   const enemyHit = $("enemy-hit");
+  const enemyDmg = $("enemy-dmg");
   const heroLevelUp = $("hero-levelup");
   const heroAura = $("hero-aura");
   const heroGearIcon = $("hero-gear-icon");
@@ -394,20 +408,29 @@
     const startTime = performance.now();
     let hitCount = 0;
     let dangerTriggered = false;
+    let dealtDamage = 0;
+    // ⑯ 1ヒットあたりのダメージ量。dps(秒間)× ヒット間隔(秒)で、
+    // 「連続的な計算」を崩さずにヒット単位の階段状の減りに変換する。
+    const damagePerHit = dps * (hitInterval / 1000);
 
     function frame(now) {
       const elapsed = now - startTime;
       const displayElapsed = Math.min(elapsed, totalDurationMs);
-      const progressToKill = Math.min(displayElapsed / (timeToKill * 1000), 1);
-      enemyHp.style.width = `${Math.max(0, (1 - progressToKill) * 100)}%`;
 
       const currentHit = Math.floor(elapsed / hitInterval);
       if (currentHit !== hitCount) {
         hitCount = currentHit;
+        dealtDamage = Math.min(enemyHpTotal, dealtDamage + damagePerHit);
+        enemyHp.style.width = `${Math.max(0, (1 - dealtDamage / enemyHpTotal) * 100)}%`;
+
+        const shownDamage = Math.max(1, Math.round(damagePerHit));
+        enemyDmg.textContent = `-${shownDamage}`;
+        const fxDuration = Math.min(hitInterval * 0.85, 350);
+        pulse(enemyDmg, fxDuration);
         // 偶数打目は勇者側のモーションを挟み、攻防の応酬に見せる。
         // アニメーション時間はヒット間隔より必ず短くし、次のヒットが
         // 来る前に完走させる(#17: 魔王戦の高速ヒットでの重なり対策)。
-        pulse(hitCount % 2 === 0 ? heroHit : enemyHit, Math.min(hitInterval * 0.85, 350));
+        pulse(hitCount % 2 === 0 ? heroHit : enemyHit, fxDuration);
       }
 
       // 残り時間が少なく、まだ倒しきれていない場合はタイマーを警告色にする
@@ -416,7 +439,7 @@
         timerBar.style.background = "var(--hp)";
       }
 
-      if (willClear && progressToKill >= 1) {
+      if (willClear && dealtDamage >= enemyHpTotal) {
         // 倒しきった → クリア処理へ
         const leveledUp = gainExp(BASE_EXP_PER_STAGE * (stage.type === "normal" ? 1 : stage.type === "big" ? 3 : stage.type === "demon" ? 6 : 2));
         maybeDropGear();
