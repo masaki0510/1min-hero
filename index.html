@@ -150,6 +150,30 @@
   #timer-wrap { width: 100%; height: 5px; background: #2a2b48; border-radius: 3px; margin-bottom: 8px; overflow: hidden; }
   #timer-bar { height: 100%; width: 100%; background: var(--accent); transition: width 0.1s linear; }
 
+  /* #30: 勝敗確定→結果画面の遷移演出。派手にしすぎず、クリア/敗北で
+     質感を変える(クリアは一瞬明るく、敗北は静かに暗転)。ステージ間の
+     横スライド(#13)と同じく、抑えた尺(0.2〜0.55秒)に留める。 */
+  #battle-screen.battle-fade-out { animation: battle-fade-out 0.2s ease-in forwards; }
+  @keyframes battle-fade-out {
+    to { opacity: 0; filter: brightness(0.35); }
+  }
+  #battle-screen.battle-flash-out { animation: battle-flash-out 0.2s ease-out forwards; }
+  @keyframes battle-flash-out {
+    0% { opacity: 1; filter: brightness(1); }
+    50% { opacity: 1; filter: brightness(1.5); }
+    100% { opacity: 0; filter: brightness(1.15); }
+  }
+  #result-screen.result-enter-defeat { animation: result-fade-in-defeat 0.5s ease-out; }
+  @keyframes result-fade-in-defeat {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  #result-screen.result-enter-clear { animation: result-fade-in-clear 0.55s ease-out; }
+  @keyframes result-fade-in-clear {
+    0% { opacity: 0; background: radial-gradient(circle, rgba(255,209,102,0.35), var(--bg) 70%); }
+    100% { opacity: 1; background: var(--bg); }
+  }
+
   /* --- Result screen --- */
   #result-screen { display: none; }
   #result-title { font-size: 1.5em; font-weight: bold; }
@@ -734,8 +758,6 @@
 
   function finishRun(cleared, failedStage) {
     cancelAnimationFrame(rafId);
-    battleScreen.style.display = "none";
-    resultScreen.style.display = "flex";
 
     const title = $("result-title");
     const detail = $("result-detail");
@@ -761,6 +783,30 @@
     newBestTag.style.display = isNewBest ? "block" : "none";
 
     stats.textContent = `才能 ${state.talent.toFixed(2)}x / 運 ${(state.luck * 100).toFixed(0)} / Lv${state.level} / 最終装備:${state.gear.rank}`;
+
+    transitionToResult(cleared);
+  }
+
+  // #30: 勝敗確定の瞬間は、そのプレイの中で最も感情が動む場面のため、
+  // 素っ気ない即時切り替えではなく短い遷移演出を挟む。クリア時は一瞬
+  // 明るく光ってから、敗北時は静かに暗転してから結果画面へ。
+  // CLAUDE.mdの「派手な演出より静かな達成感」の原則に沿い、尺は
+  // 0.2〜0.55秒の範囲に抑えている。
+  function transitionToResult(cleared) {
+    const exitClass = cleared ? "battle-flash-out" : "battle-fade-out";
+    battleScreen.classList.add(exitClass);
+    setTimeout(() => {
+      battleScreen.style.display = "none";
+      battleScreen.classList.remove(exitClass);
+      resultScreen.style.display = "flex";
+      const enterClass = cleared ? "result-enter-clear" : "result-enter-defeat";
+      resultScreen.classList.add(enterClass);
+      resultScreen.addEventListener(
+        "animationend",
+        () => resultScreen.classList.remove(enterClass),
+        { once: true }
+      );
+    }, 200);
   }
 
   $("start-btn").addEventListener("click", startGame);
