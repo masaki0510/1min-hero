@@ -32,18 +32,15 @@ function buildStageSequence() {
   const seq = [];
   let n = 0;
   for (let block = 1; block <= 3; block++) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       n++;
       seq.push({ label: `第${n}面`, type: "normal", timeLimit: 3, hpBase: 10 + (n - 1) * 2.2 });
     }
-    const isLast = block === 3;
-    seq.push({
-      label: isLast ? "魔王" : `大ボス${block}`,
-      type: isLast ? "demon" : "big",
-      timeLimit: isLast ? 10 : 8,
-      hpBase: isLast ? 450 : 60 + block * 30,
-    });
+    n++;
+    seq.push({ label: `第${n}面(中ボス)`, type: "mid", timeLimit: 5, hpBase: 45 + block * 18 });
+    seq.push({ label: `大ボス${block}`, type: "big", timeLimit: 8, hpBase: 70 + block * 35 });
   }
+  seq.push({ label: "魔王", type: "demon", timeLimit: 10, hpBase: 520 });
   return seq;
 }
 function computeHeroDps(level, gear) {
@@ -60,7 +57,7 @@ function runOne() {
     const dps = computeHeroDps(level, gear);
     if (s.hpBase / dps > s.timeLimit) return { reachedIndex: i, cleared: false };
     reachedIndex = i;
-    const expGain = EXP_PER_STAGE * (s.type === "normal" ? 1 : s.type === "big" ? 3 : 6);
+    const expGain = EXP_PER_STAGE * (s.type === "normal" ? 1 : s.type === "big" ? 3 : s.type === "demon" ? 6 : 2);
     exp += expGain * talent;
     while (exp >= expToNext) { exp -= expToNext; level++; expToNext = Math.round(expToNext * EXP_CURVE); }
     const dropped = rollGear(luck);

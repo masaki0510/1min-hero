@@ -193,29 +193,30 @@
   }
 
   /* =========================================================
-   * ステージ構成(通常面3つごとに大ボス、最後は魔王)
+   * ステージ構成
+   * 各ブロック = 通常面2 + 中ボス1(計3面)→ 大ボス、を3ブロック繰り返し、
+   * 最後に魔王。仕様書の「3面ごとに大ボス」「各面の最後に中ボス」を
+   * 素直に読むと、ブロック内3面目が中ボス格上げ面という解釈になるため、
+   * MVP(#1)で一度落としてしまった中ボス階層をここで復元した。
    * ========================================================= */
   function buildStageSequence() {
     const seq = [];
     let n = 0;
     for (let block = 1; block <= 3; block++) {
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         n++;
         seq.push({ label: `第${n}面`, type: "normal", timeLimit: 3, hpBase: 10 + (n - 1) * 2.2 });
       }
-      const isLast = block === 3;
-      seq.push({
-        label: isLast ? "魔王" : `大ボス ${block}`,
-        type: isLast ? "demon" : "big",
-        timeLimit: isLast ? 10 : 8,
-        hpBase: isLast ? 450 : 60 + block * 30,
-      });
+      n++;
+      seq.push({ label: `第${n}面(中ボス)`, type: "mid", timeLimit: 5, hpBase: 45 + block * 18 });
+      seq.push({ label: `大ボス${block}`, type: "big", timeLimit: 8, hpBase: 70 + block * 35 });
     }
+    seq.push({ label: "魔王", type: "demon", timeLimit: 10, hpBase: 520 });
     return seq;
   }
 
-  const ENEMY_ICONS = { normal: "👺", big: "🐗", demon: "🐉" };
-  const ENEMY_LABEL_PREFIX = { normal: "雑魚", big: "大ボス", demon: "魔王" };
+  const ENEMY_ICONS = { normal: "👺", mid: "👹", big: "🐗", demon: "🐉" };
+  const ENEMY_LABEL_PREFIX = { normal: "雑魚", mid: "中ボス", big: "大ボス", demon: "魔王" };
 
   /* =========================================================
    * 勝敗判定(★演出のための忖度をしない・純粋計算)
@@ -330,6 +331,7 @@
     enemyHp.style.width = "100%";
     heroHp.style.width = "100%";
     timerBar.style.width = "100%";
+    timerBar.style.background = "var(--accent)";
     timerBar.style.transition = "none";
     requestAnimationFrame(() => {
       timerBar.style.transition = `width ${stage.timeLimit}s linear`;
@@ -341,10 +343,15 @@
     const timeToKill = enemyHpTotal / dps; // 秒
     const willClear = timeToKill <= stage.timeLimit;
 
-    // アニメーション: 一定間隔でヒットさせてHPバーを削っていく演出
-    const hitInterval = 260; // ms
+    // ④ ペーシング(仮): 面の尺が長いほど手数を増やし、終盤ほど畳みかける
+    // ような密度にする。中ボス以降は「攻防の応酬」に見せるため、勇者側の
+    // モーションも(実際にはダメージを受けないが)交互に挟む。
+    const HIT_INTERVAL_BY_TYPE = { normal: 260, mid: 230, big: 200, demon: 170 };
+    const hitInterval = HIT_INTERVAL_BY_TYPE[stage.type] || 260;
     const totalDurationMs = stage.timeLimit * 1000;
     const startTime = performance.now();
+    let hitCount = 0;
+    let dangerTriggered = false;
 
     function frame(now) {
       const elapsed = now - startTime;
@@ -352,8 +359,17 @@
       const progressToKill = Math.min(displayElapsed / (timeToKill * 1000), 1);
       enemyHp.style.width = `${Math.max(0, (1 - progressToKill) * 100)}%`;
 
-      if (Math.floor(elapsed / hitInterval) !== Math.floor((elapsed - 16) / hitInterval)) {
-        pulse(enemyHit);
+      const currentHit = Math.floor(elapsed / hitInterval);
+      if (currentHit !== hitCount) {
+        hitCount = currentHit;
+        // 偶数打目は勇者側のモーションを挟み、攻防の応酬に見せる
+        pulse(hitCount % 2 === 0 ? heroHit : enemyHit);
+      }
+
+      // 残り時間が少なく、まだ倒しきれていない場合はタイマーを警告色にする
+      if (!dangerTriggered && !willClear && displayElapsed / totalDurationMs > 0.7) {
+        dangerTriggered = true;
+        timerBar.style.background = "var(--hp)";
       }
 
       if (willClear && progressToKill >= 1) {
@@ -414,6 +430,19 @@
         "才能も運も味方せず、雑魚相手にすらなすすべがなかった。大ハズレの運命。",
       ],
     },
+    mid: {
+      talent: [
+        "中ボスの壁を前に、成長がわずかに足りなかった。",
+        "レベルアップの伸びが鈍く、中ボスを崩しきれなかった。",
+      ],
+      luck: [
+        "中ボス戦を前に、装備がもう一段育たなかった。",
+        "運が向かないまま、中ボスに時間切れを告げられた。",
+      ],
+      both: [
+        "才能も運も噛み合わず、中ボスの壁に阻まれた。",
+      ],
+    },
     big: {
       talent: [
         "大ボスの猛攻に、成長速度が最後まで追いつかなかった。",
@@ -444,7 +473,8 @@
 
   const RARITY_BY_STAGE_TYPE = {
     normal: { label: "大ハズレ", note: "序盤で力尽きた回。次はもう少し粘れるはず。" },
-    big: { label: "普通", note: "中盤の壁で力尽きた回。まずまずの結果。" },
+    mid: { label: "ハズレ", note: "中ボスで力尽きた回。もう一押し欲しかった。" },
+    big: { label: "普通", note: "大ボスの壁で力尽きた回。まずまずの結果。" },
     demon: { label: "レア", note: "魔王の前まで辿り着いた回。かなりの当たり枠。" },
   };
   const RARITY_CLEARED = { label: "激レア", note: "魔王を撃破した、最高の運命。" };
@@ -459,8 +489,8 @@
    * 実際の使われ方を見て要否を再検討する。
    * ========================================================= */
   const BEST_RECORD_KEY = "1min-hero-best-record-v1";
-  const RARITY_RANK = { normal: 0, big: 1, demon: 2, cleared: 3 };
-  const RARITY_LABEL_TEXT = { normal: "大ハズレ", big: "普通", demon: "レア", cleared: "激レア" };
+  const RARITY_RANK = { normal: 0, mid: 1, big: 2, demon: 3, cleared: 4 };
+  const RARITY_LABEL_TEXT = { normal: "大ハズレ", mid: "ハズレ", big: "普通", demon: "レア", cleared: "激レア" };
 
   function loadBestRecord() {
     try {
