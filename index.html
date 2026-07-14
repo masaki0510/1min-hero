@@ -298,6 +298,15 @@
     heroAura.style.background = AURA_COLOR[state.gear.key];
     heroAura.style.opacity = state.gear.key === "common" ? 0 : 0.55;
     heroGearIcon.textContent = GEAR_ICON[state.gear.key];
+    updateExpGauge();
+  }
+
+  // ⑲ 勇者側のバーは「HP」ではなく次のレベルアップまでの経験値ゲージとして扱う。
+  // このゲームは勇者がダメージを受けない一方的な計算モデルのため、常に満タンな
+  // 偽HPバーを表示するより、実データ(経験値の伸び)を見せた方が情報として誠実。
+  function updateExpGauge() {
+    const ratio = Math.min(1, state.exp / state.expToNext);
+    heroHp.style.width = `${ratio * 100}%`;
   }
 
   function gainExp(amount) {
@@ -344,7 +353,7 @@
     enemyIcon.textContent = ENEMY_ICONS[stage.type];
     enemyTag.textContent = `${ENEMY_LABEL_PREFIX[stage.type]}`;
     enemyHp.style.width = "100%";
-    heroHp.style.width = "100%";
+    // 勇者側のバーは「HP」ではなく経験値ゲージ(#19)なので面開始時にリセットしない
     timerBar.style.width = "100%";
     timerBar.style.background = "var(--accent)";
     timerBar.style.transition = "none";
