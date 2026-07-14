@@ -91,6 +91,19 @@
     60% { opacity: 1; transform: translate(-50%,-80%) scale(1.15); }
     100% { opacity: 0; transform: translate(-50%,-110%) scale(1.1); }
   }
+  .levelup-fx {
+    position: absolute; top: -18px; left: 50%; transform: translate(-50%, 0);
+    font-size: 0.85em; font-weight: bold; color: var(--legend);
+    white-space: nowrap; opacity: 0; pointer-events: none;
+    text-shadow: 0 0 6px rgba(255, 209, 102, 0.8);
+  }
+  .levelup-fx.show { animation: levelup-pop 0.9s ease-out; }
+  @keyframes levelup-pop {
+    0% { opacity: 0; transform: translate(-50%, 10px) scale(0.7); }
+    20% { opacity: 1; transform: translate(-50%, -6px) scale(1.1); }
+    75% { opacity: 1; transform: translate(-50%, -6px) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -18px) scale(1); }
+  }
   #status-bar {
     display: flex; justify-content: space-around; font-size: 0.75em; color: #b9bde8;
     padding: 8px 0; border-top: 1px solid #2a2b48;
@@ -130,6 +143,7 @@
         <span class="stick" id="hero-stick">🧍</span>
         <span class="gear-icon" id="hero-gear-icon"></span>
         <div class="hit-fx" id="hero-hit">!</div>
+        <div class="levelup-fx" id="hero-levelup">LEVEL UP!</div>
         <div class="name-tag" id="hero-tag">勇者</div>
         <div class="hpbar-wrap"><div class="hpbar" id="hero-hp"></div></div>
       </div>
@@ -275,6 +289,7 @@
   const enemyIcon = $("enemy-icon");
   const heroHit = $("hero-hit");
   const enemyHit = $("enemy-hit");
+  const heroLevelUp = $("hero-levelup");
   const heroAura = $("hero-aura");
   const heroGearIcon = $("hero-gear-icon");
   const statTalent = $("stat-talent");
@@ -311,11 +326,14 @@
 
   function gainExp(amount) {
     state.exp += amount * state.talent;
+    let leveledUp = false;
     while (state.exp >= state.expToNext) {
       state.exp -= state.expToNext;
       state.level++;
       state.expToNext = Math.round(state.expToNext * 1.35);
+      leveledUp = true;
     }
+    return leveledUp;
   }
 
   function maybeDropGear() {
@@ -400,9 +418,10 @@
 
       if (willClear && progressToKill >= 1) {
         // 倒しきった → クリア処理へ
-        gainExp(BASE_EXP_PER_STAGE * (stage.type === "normal" ? 1 : stage.type === "big" ? 3 : stage.type === "demon" ? 6 : 2));
+        const leveledUp = gainExp(BASE_EXP_PER_STAGE * (stage.type === "normal" ? 1 : stage.type === "big" ? 3 : stage.type === "demon" ? 6 : 2));
         maybeDropGear();
         updateHud();
+        if (leveledUp) showLevelUp();
         state.reachedLabel = stage.label;
         state.stageIndex++;
         setTimeout(runStage, 250);
@@ -420,6 +439,14 @@
       rafId = requestAnimationFrame(frame);
     }
     rafId = requestAnimationFrame(frame);
+  }
+
+  // ⑱ レベルアップの瞬間だけは、成長の手応えとして目立つ演出を入れる。
+  // 頻繁に起きるヒット演出とは別枠にし、控えめな他の演出とのメリハリをつける。
+  function showLevelUp() {
+    heroLevelUp.classList.remove("show");
+    void heroLevelUp.offsetWidth;
+    heroLevelUp.classList.add("show");
   }
 
   function pulse(el, durationMs) {
