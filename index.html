@@ -67,7 +67,15 @@
     width: 100px; height: 100px; border-radius: 50%; filter: blur(14px);
     opacity: 0.55; z-index: -1;
   }
-  .stick { font-size: 42px; display: block; }
+  .stick { font-size: 42px; display: block; animation: idle-bob 1.6s ease-in-out infinite; }
+  @keyframes idle-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  .gear-icon {
+    position: absolute; top: 4px; right: -6px; font-size: 20px;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,0.6));
+  }
   .name-tag { font-size: 0.7em; color: #aeb4d8; margin-top: 4px; }
   .hpbar-wrap { width: 90px; height: 8px; background: #2a2b48; border-radius: 4px; margin-top: 6px; overflow: hidden; }
   .hpbar { height: 100%; background: var(--hp); width: 100%; transition: width 0.25s linear; }
@@ -119,7 +127,8 @@
     <div id="arena">
       <div class="fighter" id="hero">
         <div class="aura" id="hero-aura"></div>
-        <span class="stick">🧍</span>
+        <span class="stick" id="hero-stick">🧍</span>
+        <span class="gear-icon" id="hero-gear-icon"></span>
         <div class="hit-fx" id="hero-hit">!</div>
         <div class="name-tag" id="hero-tag">勇者</div>
         <div class="hpbar-wrap"><div class="hpbar" id="hero-hp"></div></div>
@@ -267,6 +276,7 @@
   const heroHit = $("hero-hit");
   const enemyHit = $("enemy-hit");
   const heroAura = $("hero-aura");
+  const heroGearIcon = $("hero-gear-icon");
   const statTalent = $("stat-talent");
   const statLuck = $("stat-luck");
   const statLevel = $("stat-level");
@@ -274,6 +284,10 @@
 
   const AURA_COLOR = { common: "transparent", rare: "#5dd9ff", epic: "#c77dff", legend: "#ffd166" };
   const RANK_CLASS = { common: "rank-common", rare: "rank-rare", epic: "rank-epic", legend: "rank-legend" };
+  // ⑤ 視覚デザイン(仮): 装備の「有無・グレード」を武器アイコンでも表現する。
+  // オーラの色差はスマホの屋外・明所だと視認しづらいため、形状で見分けが
+  // つく武器アイコンを併用する。コモンは「素手」= 装備なしをそのまま表す。
+  const GEAR_ICON = { common: "", rare: "🗡️", epic: "⚔️", legend: "👑" };
 
   function updateHud() {
     statTalent.textContent = state.talent.toFixed(2) + "x";
@@ -283,6 +297,7 @@
     statGear.className = RANK_CLASS[state.gear.key];
     heroAura.style.background = AURA_COLOR[state.gear.key];
     heroAura.style.opacity = state.gear.key === "common" ? 0 : 0.55;
+    heroGearIcon.textContent = GEAR_ICON[state.gear.key];
   }
 
   function gainExp(amount) {
