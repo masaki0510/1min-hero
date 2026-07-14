@@ -39,6 +39,12 @@
   }
   h1 { font-size: 1.6em; margin: 0; letter-spacing: 0.05em; }
   .sub { color: #9aa0c0; font-size: 0.9em; margin-top: -12px; }
+  #best-record { color: #8b90b8; font-size: 0.8em; }
+  #best-record b { color: var(--accent); }
+  #new-best-tag {
+    display: none; color: var(--accent); font-size: 0.85em; font-weight: bold;
+    margin-top: -8px;
+  }
   button.primary {
     background: var(--accent); color: #2a1d00; border: none;
     padding: 14px 36px; font-size: 1.1em; border-radius: 999px;
@@ -103,6 +109,7 @@
   <div id="start-screen">
     <h1>1分で世界を救え</h1>
     <div class="sub">タップして今回の運命を引く</div>
+    <div id="best-record">-</div>
     <button class="primary" id="start-btn">はじめる</button>
   </div>
 
@@ -134,6 +141,7 @@
 
   <div id="result-screen">
     <div id="result-title">-</div>
+    <div id="new-best-tag">自己ベスト更新!</div>
     <div id="result-rarity">-</div>
     <div id="result-detail">-</div>
     <div id="result-stats">-</div>
@@ -441,6 +449,55 @@
   };
   const RARITY_CLEARED = { label: "激レア", note: "魔王を撃破した、最高の運命。" };
 
+  /* =========================================================
+   * ③ 収集要素(仮 — 自己ベスト1件のみを保持する最小構成)
+   *
+   * 仕様書②で「過去のプレイ記録を残すと振り返り行為自体が新たな時間泥棒に
+   * なりうる」と指摘されているため、全プレイの履歴ログは意図的に持たせない。
+   * 「直近の自己ベスト1件」だけを localStorage に保持し、スクロールして
+   * 見返せるような一覧は作らない設計にした。これは仮の判断であり、
+   * 実際の使われ方を見て要否を再検討する。
+   * ========================================================= */
+  const BEST_RECORD_KEY = "1min-hero-best-record-v1";
+  const RARITY_RANK = { normal: 0, big: 1, demon: 2, cleared: 3 };
+  const RARITY_LABEL_TEXT = { normal: "大ハズレ", big: "普通", demon: "レア", cleared: "激レア" };
+
+  function loadBestRecord() {
+    try {
+      const raw = localStorage.getItem(BEST_RECORD_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function renderBestRecord() {
+    const best = loadBestRecord();
+    const el = $("best-record");
+    if (!best) {
+      el.textContent = "まだ記録なし。最初の運命を引いてみよう。";
+      return;
+    }
+    el.innerHTML = `自己ベスト: <b>${best.label}</b>(${best.reachedLabel})`;
+  }
+
+  function saveBestRecordIfBetter(rankKey, reachedLabel) {
+    const rank = RARITY_RANK[rankKey];
+    const best = loadBestRecord();
+    const isNewBest = !best || rank > best.rank;
+    if (isNewBest) {
+      try {
+        localStorage.setItem(
+          BEST_RECORD_KEY,
+          JSON.stringify({ rank, label: RARITY_LABEL_TEXT[rankKey], reachedLabel })
+        );
+      } catch (e) {
+        // localStorage が使えない環境ではベスト記録機能を静かに諦める
+      }
+    }
+    return isNewBest;
+  }
+
   function finishRun(cleared, failedStage) {
     cancelAnimationFrame(rafId);
     battleScreen.style.display = "none";
@@ -450,11 +507,14 @@
     const detail = $("result-detail");
     const stats = $("result-stats");
     const rarity = $("result-rarity");
+    const newBestTag = $("new-best-tag");
 
+    let isNewBest;
     if (cleared) {
       title.textContent = "世界は救われた";
       detail.textContent = "魔王を打ち倒し、1分で世界を救った。今回は最高の運命だった。";
       rarity.textContent = `【${RARITY_CLEARED.label}】${RARITY_CLEARED.note}`;
+      isNewBest = saveBestRecordIfBetter("cleared", "魔王撃破");
     } else {
       const causeTexts = LOSS_TEXTS[failedStage.type][state.lastCause];
       const text = causeTexts[Math.floor(Math.random() * causeTexts.length)];
@@ -462,13 +522,16 @@
       title.textContent = `${state.reachedLabel}で力尽きた`;
       detail.textContent = text;
       rarity.textContent = `【${r.label}】${r.note}`;
+      isNewBest = saveBestRecordIfBetter(failedStage.type, state.reachedLabel);
     }
+    newBestTag.style.display = isNewBest ? "block" : "none";
 
     stats.textContent = `才能 ${state.talent.toFixed(2)}x / 運 ${(state.luck * 100).toFixed(0)} / Lv${state.level} / 最終装備:${state.gear.rank}`;
   }
 
   $("start-btn").addEventListener("click", startGame);
   $("retry-btn").addEventListener("click", startGame);
+  renderBestRecord();
 })();
 </script>
 </body>
