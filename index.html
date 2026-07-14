@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>1分で世界を救え</title>
+<style>
+  :root {
+    --bg: #0f1020;
+    --panel: #1a1b32;
+    --accent: #ffd166;
+    --hp: #ff5d5d;
+    --exp: #5dd9ff;
+    --text: #eef0ff;
+    --common: #9aa0b0;
+    --rare: #5dd9ff;
+    --epic: #c77dff;
+    --legend: #ffd166;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    width: 100%; height: 100vh; max-width: 480px; margin: 0 auto;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+
+  /* --- Start screen --- */
+  #start-screen, #result-screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 24px; padding: 24px; text-align: center; z-index: 10;
+    background: var(--bg);
+  }
+  h1 { font-size: 1.6em; margin: 0; letter-spacing: 0.05em; }
+  .sub { color: #9aa0c0; font-size: 0.9em; margin-top: -12px; }
+  button.primary {
+    background: var(--accent); color: #2a1d00; border: none;
+    padding: 14px 36px; font-size: 1.1em; border-radius: 999px;
+    font-weight: bold; cursor: pointer;
+  }
+  button.primary:active { transform: scale(0.97); }
+
+  /* --- Battle screen --- */
+  #battle-screen { flex: 1; display: none; flex-direction: column; padding: 16px; }
+  #stage-label { text-align: center; font-size: 0.95em; color: #cfd3ff; height: 1.4em; }
+  #arena {
+    flex: 1; position: relative; display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 8px;
+  }
+  .fighter { position: relative; width: 90px; text-align: center; }
+  #hero { position: absolute; left: 18%; bottom: 20px; }
+  #enemy { position: absolute; right: 18%; bottom: 20px; }
+  .aura {
+    position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+    width: 100px; height: 100px; border-radius: 50%; filter: blur(14px);
+    opacity: 0.55; z-index: -1;
+  }
+  .stick { font-size: 42px; display: block; }
+  .name-tag { font-size: 0.7em; color: #aeb4d8; margin-top: 4px; }
+  .hpbar-wrap { width: 90px; height: 8px; background: #2a2b48; border-radius: 4px; margin-top: 6px; overflow: hidden; }
+  .hpbar { height: 100%; background: var(--hp); width: 100%; transition: width 0.25s linear; }
+  #hero .hpbar { background: var(--exp); }
+  .hit-fx {
+    position: absolute; top: 30%; left: 50%; transform: translate(-50%,-50%);
+    font-size: 1.4em; font-weight: bold; color: var(--accent);
+    opacity: 0; pointer-events: none;
+  }
+  .hit-fx.show { animation: pop 0.35s ease-out; }
+  @keyframes pop {
+    0% { opacity: 1; transform: translate(-50%,-50%) scale(0.6); }
+    60% { opacity: 1; transform: translate(-50%,-80%) scale(1.15); }
+    100% { opacity: 0; transform: translate(-50%,-110%) scale(1.1); }
+  }
+  #status-bar {
+    display: flex; justify-content: space-around; font-size: 0.75em; color: #b9bde8;
+    padding: 8px 0; border-top: 1px solid #2a2b48;
+  }
+  #status-bar b { color: var(--text); }
+  #timer-wrap { width: 100%; height: 5px; background: #2a2b48; border-radius: 3px; margin-bottom: 8px; overflow: hidden; }
+  #timer-bar { height: 100%; width: 100%; background: var(--accent); transition: width 0.1s linear; }
+
+  /* --- Result screen --- */
+  #result-screen { display: none; }
+  #result-title { font-size: 1.5em; font-weight: bold; }
+  #result-detail { color: #cfd3ff; font-size: 0.95em; line-height: 1.6; max-width: 340px; }
+  #result-stats { font-size: 0.8em; color: #8b90b8; }
+  .rank-common { color: var(--common); }
+  .rank-rare { color: var(--rare); }
+  .rank-epic { color: var(--epic); }
+  .rank-legend { color: var(--legend); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="start-screen">
+    <h1>1分で世界を救え</h1>
+    <div class="sub">タップして今回の運命を引く</div>
+    <button class="primary" id="start-btn">はじめる</button>
+  </div>
+
+  <div id="battle-screen">
+    <div id="timer-wrap"><div id="timer-bar"></div></div>
+    <div id="stage-label">-</div>
+    <div id="arena">
+      <div class="fighter" id="hero">
+        <div class="aura" id="hero-aura"></div>
+        <span class="stick">🧍</span>
+        <div class="hit-fx" id="hero-hit">!</div>
+        <div class="name-tag" id="hero-tag">勇者</div>
+        <div class="hpbar-wrap"><div class="hpbar" id="hero-hp"></div></div>
+      </div>
+      <div class="fighter" id="enemy">
+        <span class="stick" id="enemy-icon">👹</span>
+        <div class="hit-fx" id="enemy-hit">!</div>
+        <div class="name-tag" id="enemy-tag">-</div>
+        <div class="hpbar-wrap"><div class="hpbar" id="enemy-hp"></div></div>
+      </div>
+    </div>
+    <div id="status-bar">
+      <div>才能 <b id="stat-talent">-</b></div>
+      <div>運 <b id="stat-luck">-</b></div>
+      <div>Lv <b id="stat-level">-</b></div>
+      <div>装備 <b id="stat-gear">-</b></div>
+    </div>
+  </div>
+
+  <div id="result-screen">
+    <div id="result-title">-</div>
+    <div id="result-detail">-</div>
+    <div id="result-stats">-</div>
+    <button class="primary" id="retry-btn">もう一度運命を引く</button>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =========================================================
+   * ① 確率設計(仮値 — 実プレイで調整する前提)
+   * ========================================================= */
+  const TALENT_MIN = 0.5, TALENT_MAX = 3.0; // 経験値倍率レンジ
+  const GEAR_TABLE = [
+    { rank: "コモン",       key: "common", weight: 70, atkMul: 1.00 },
+    { rank: "レア",         key: "rare",   weight: 20, atkMul: 1.25 },
+    { rank: "エピック",     key: "epic",   weight: 8,  atkMul: 1.6  },
+    { rank: "レジェンダリー", key: "legend", weight: 2,  atkMul: 2.2  },
+  ];
+
+  // 山型分布(三角分布)で 0.5〜3.0 の間に才能を落とす
+  function rollTalent() {
+    const r = (Math.random() + Math.random()) / 2; // 中央寄り
+    return +(TALENT_MIN + r * (TALENT_MAX - TALENT_MIN)).toFixed(2);
+  }
+
+  // 運の値(0〜1) : ガチャテーブルの重みをこの値でシフトさせる基礎乱数
+  function rollLuck() {
+    return Math.random();
+  }
+
+  // 運の値が高いほど上位ランクの重みが増すよう補正して1回抽選
+  function rollGear(luck) {
+    const boosted = GEAR_TABLE.map((g, i) => {
+      // luckが高いほど上位ランク(配列後方)の重みを増幅
+      const boost = 1 + luck * i * 1.8;
+      return { ...g, w: g.weight * boost };
+    });
+    const total = boosted.reduce((s, g) => s + g.w, 0);
+    let r = Math.random() * total;
+    for (const g of boosted) {
+      if (r < g.w) return g;
+      r -= g.w;
+    }
+    return boosted[0];
+  }
+
+  /* =========================================================
+   * ステージ構成
+   * ========================================================= */
+  // type: normal / mid / big / demon
+  function buildStages() {
+    const stages = [];
+    let stageNo = 0;
+    for (let set = 1; set <= 3; set++) {
+      for (let i = 0; i < 3; i++) {
+        stageNo++;
+        stages.push({ no: stageNo, type: "normal", timeLimit: 3, hpBase: 30 });
+      }
+      stages.push({ no: stageNo + 0.5, type: "mid", timeLimit: 5, hpBase: 90 });
+    }
+    stages.push({ no: 99, type: "big", timeLimit: 8, hpBase: 220 });
+    stages.push({ no: 100, type: "demon", timeLimit: 10, hpBase: 420 });
+    return stages;
+  }
+  // 上記だと3セットで9通常+3中ボスになり大ボスが1体だけになってしまうため、
+  // 仕様(3面ごとに大ボス)に合わせて構成し直す
+  function buildStageSequence() {
+    const seq = [];
+    let n = 0;
+    for (let block = 1; block <= 3; block++) {
+      for (let i = 0; i < 3; i++) {
+        n++;
+        seq.push({ label: `第${n}面`, type: "normal", timeLimit: 3, hpBase: 26 + n * 4 });
+      }
+      const isLast = block === 3;
+      seq.push({
+        label: isLast ? "魔王" : `大ボス ${block}`,
+        type: isLast ? "demon" : "big",
+        timeLimit: isLast ? 10 : 8,
+        hpBase: isLast ? 480 : 150 + block * 60,
+      });
+    }
+    return seq;
+  }
+
+  const ENEMY_ICONS = { normal: "👺", big: "🐗", demon: "🐉" };
+  const ENEMY_LABEL_PREFIX = { normal: "雑魚", big: "大ボス", demon: "魔王" };
+
+  /* =========================================================
+   * 勝敗判定(★演出のための忖度をしない・純粋計算)
+   * ========================================================= */
+  const BASE_ATK = 8;      // 秒間基礎攻撃力
+  const BASE_HP = 20;      // 敵HP基礎値の係数
+  const BASE_EXP_PER_STAGE = 10;
+
+  function computeHeroDps(level, gear) {
+    // レベルは才能(経験値倍率)の結果として上がる → レベル依存の攻撃力上昇
+    const levelMul = 1 + (level - 1) * 0.18;
+    return BASE_ATK * levelMul * gear.atkMul;
+  }
+
+  /* =========================================================
+   * 状態
+   * ========================================================= */
+  let state = null;
+
+  function newRunState() {
+    const talent = rollTalent();
+    const luck = rollLuck();
+    return {
+      talent, luck,
+      level: 1, exp: 0, expToNext: 20,
+      gear: GEAR_TABLE[0], // 初期はコモン
+      stages: buildStageSequence(),
+      stageIndex: 0,
+      reachedLabel: "開始前",
+      lastCause: null,
+      cleared: false,
+    };
+  }
+
+  /* =========================================================
+   * DOM refs
+   * ========================================================= */
+  const $ = (id) => document.getElementById(id);
+  const startScreen = $("start-screen");
+  const battleScreen = $("battle-screen");
+  const resultScreen = $("result-screen");
+  const stageLabel = $("stage-label");
+  const timerBar = $("timer-bar");
+  const heroHp = $("hero-hp");
+  const enemyHp = $("enemy-hp");
+  const enemyTag = $("enemy-tag");
+  const enemyIcon = $("enemy-icon");
+  const heroHit = $("hero-hit");
+  const enemyHit = $("enemy-hit");
+  const heroAura = $("hero-aura");
+  const statTalent = $("stat-talent");
+  const statLuck = $("stat-luck");
+  const statLevel = $("stat-level");
+  const statGear = $("stat-gear");
+
+  const AURA_COLOR = { common: "transparent", rare: "#5dd9ff", epic: "#c77dff", legend: "#ffd166" };
+  const RANK_CLASS = { common: "rank-common", rare: "rank-rare", epic: "rank-epic", legend: "rank-legend" };
+
+  function updateHud() {
+    statTalent.textContent = state.talent.toFixed(2) + "x";
+    statLuck.textContent = (state.luck * 100).toFixed(0);
+    statLevel.textContent = state.level;
+    statGear.textContent = state.gear.rank;
+    statGear.className = RANK_CLASS[state.gear.key];
+    heroAura.style.background = AURA_COLOR[state.gear.key];
+    heroAura.style.opacity = state.gear.key === "common" ? 0 : 0.55;
+  }
+
+  function gainExp(amount) {
+    state.exp += amount * state.talent;
+    while (state.exp >= state.expToNext) {
+      state.exp -= state.expToNext;
+      state.level++;
+      state.expToNext = Math.round(state.expToNext * 1.35);
+    }
+  }
+
+  function maybeDropGear() {
+    const dropped = rollGear(state.luck);
+    const currentRankIndex = GEAR_TABLE.findIndex((g) => g.key === state.gear.key);
+    const droppedIndex = GEAR_TABLE.findIndex((g) => g.key === dropped.key);
+    if (droppedIndex > currentRankIndex) {
+      state.gear = dropped;
+    }
+  }
+
+  /* =========================================================
+   * バトルシーケンス制御
+   * ========================================================= */
+  let rafId = null;
+
+  function startGame() {
+    state = newRunState();
+    updateHud();
+    startScreen.style.display = "none";
+    resultScreen.style.display = "none";
+    battleScreen.style.display = "flex";
+    state.stageIndex = 0;
+    runStage();
+  }
+
+  function runStage() {
+    const stage = state.stages[state.stageIndex];
+    if (!stage) {
+      finishRun(true, null);
+      return;
+    }
+
+    stageLabel.textContent = stage.label;
+    enemyIcon.textContent = ENEMY_ICONS[stage.type];
+    enemyTag.textContent = `${ENEMY_LABEL_PREFIX[stage.type]}`;
+    enemyHp.style.width = "100%";
+    heroHp.style.width = "100%";
+    timerBar.style.width = "100%";
+    timerBar.style.transition = "none";
+    requestAnimationFrame(() => {
+      timerBar.style.transition = `width ${stage.timeLimit}s linear`;
+      timerBar.style.width = "0%";
+    });
+
+    const dps = computeHeroDps(state.level, state.gear);
+    const enemyHpTotal = stage.hpBase;
+    const timeToKill = enemyHpTotal / dps; // 秒
+    const willClear = timeToKill <= stage.timeLimit;
+
+    // アニメーション: 一定間隔でヒットさせてHPバーを削っていく演出
+    const hitInterval = 260; // ms
+    const totalDurationMs = stage.timeLimit * 1000;
+    const startTime = performance.now();
+
+    function frame(now) {
+      const elapsed = now - startTime;
+      const displayElapsed = Math.min(elapsed, totalDurationMs);
+      const progressToKill = Math.min(displayElapsed / (timeToKill * 1000), 1);
+      enemyHp.style.width = `${Math.max(0, (1 - progressToKill) * 100)}%`;
+
+      if (Math.floor(elapsed / hitInterval) !== Math.floor((elapsed - 16) / hitInterval)) {
+        pulse(enemyHit);
+      }
+
+      if (willClear && progressToKill >= 1) {
+        // 倒しきった → クリア処理へ
+        gainExp(BASE_EXP_PER_STAGE * (stage.type === "normal" ? 1 : stage.type === "big" ? 3 : stage.type === "demon" ? 6 : 2));
+        maybeDropGear();
+        updateHud();
+        state.reachedLabel = stage.label;
+        state.stageIndex++;
+        setTimeout(runStage, 250);
+        return;
+      }
+
+      if (!willClear && displayElapsed >= totalDurationMs) {
+        // タイムアップ → 敗北
+        state.reachedLabel = stage.label;
+        state.lastCause = pickLossCause();
+        finishRun(false, stage);
+        return;
+      }
+
+      rafId = requestAnimationFrame(frame);
+    }
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function pulse(el) {
+    el.classList.remove("show");
+    void el.offsetWidth;
+    el.classList.add("show");
+  }
+
+  /* =========================================================
+   * ② 敗北演出(仮 — 敗因×面の組み合わせテキスト)
+   * ========================================================= */
+  function pickLossCause() {
+    // 才能・運のどちらが足を引っ張ったかをざっくり判定
+    const talentScore = (state.talent - TALENT_MIN) / (TALENT_MAX - TALENT_MIN);
+    if (talentScore < 0.35 && state.luck < 0.35) {
+      return "both";
+    }
+    return talentScore <= state.luck ? "talent" : "luck";
+  }
+
+  const LOSS_TEXTS = {
+    talent: [
+      "才能が育たず、成長が追いつかなかった。",
+      "レベルアップの伸びが鈍く、力及ばず。",
+    ],
+    luck: [
+      "運に恵まれず、装備が最後まで育たなかった。",
+      "ろくな装備を引けないまま、力尽きた。",
+    ],
+    both: [
+      "才能も運も味方せず、なすすべがなかった。",
+    ],
+  };
+
+  function finishRun(cleared, failedStage) {
+    cancelAnimationFrame(rafId);
+    battleScreen.style.display = "none";
+    resultScreen.style.display = "flex";
+
+    const title = $("result-title");
+    const detail = $("result-detail");
+    const stats = $("result-stats");
+
+    if (cleared) {
+      title.textContent = "世界は救われた";
+      detail.textContent = "魔王を打ち倒し、1分で世界を救った。今回は最高の運命だった。";
+    } else {
+      const causeTexts = LOSS_TEXTS[state.lastCause];
+      const text = causeTexts[Math.floor(Math.random() * causeTexts.length)];
+      title.textContent = `${state.reachedLabel}で力尽きた`;
+      detail.textContent = text;
+    }
+
+    stats.textContent = `才能 ${state.talent.toFixed(2)}x / 運 ${(state.luck * 100).toFixed(0)} / Lv${state.level} / 最終装備:${state.gear.rank}`;
+  }
+
+  $("start-btn").addEventListener("click", startGame);
+  $("retry-btn").addEventListener("click", startGame);
+})();
+</script>
+</body>
+</html>
