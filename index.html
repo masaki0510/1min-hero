@@ -57,11 +57,33 @@
   #stage-label { text-align: center; font-size: 0.95em; color: #cfd3ff; height: 1.4em; }
   #arena {
     flex: 1; position: relative; display: flex; align-items: flex-end; justify-content: center;
-    padding-bottom: 8px;
+    padding-bottom: 8px; overflow: hidden;
+  }
+  /* ⑬ 地面のスクロールで「前に進んでいる」実感を常時出す。
+     大きなカメラ演出は避け、控えめな並進表現に留める。 */
+  #ground {
+    position: absolute; left: 0; right: 0; bottom: 14px; height: 2px;
+    background-image: repeating-linear-gradient(90deg, #33345a 0 16px, transparent 16px 32px);
+    background-size: 32px 2px;
+    animation: ground-scroll 1s linear infinite;
+  }
+  @keyframes ground-scroll {
+    from { background-position-x: 0; }
+    to { background-position-x: -32px; }
   }
   .fighter { position: relative; width: 90px; text-align: center; }
   #hero { position: absolute; left: 18%; bottom: 20px; }
   #enemy { position: absolute; right: 18%; bottom: 20px; }
+  #enemy.enter { animation: enemy-enter 0.35s ease-out; }
+  @keyframes enemy-enter {
+    0% { transform: translateX(50px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+  #enemy.exit { animation: enemy-exit 0.22s ease-in forwards; }
+  @keyframes enemy-exit {
+    0% { transform: translateX(0); opacity: 1; }
+    100% { transform: translateX(-50px); opacity: 0; }
+  }
   .aura {
     position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
     width: 100px; height: 100px; border-radius: 50%; filter: blur(14px);
@@ -187,6 +209,7 @@
     <div id="timer-wrap"><div id="timer-bar"></div></div>
     <div id="stage-label">-</div>
     <div id="arena">
+      <div id="ground"></div>
       <div class="fighter" id="hero">
         <div class="aura" id="hero-aura"></div>
         <span class="stick" id="hero-stick">🧍</span>
@@ -333,6 +356,7 @@
   const battleScreen = $("battle-screen");
   const resultScreen = $("result-screen");
   const stageLabel = $("stage-label");
+  const enemyFighter = $("enemy");
   const timerBar = $("timer-bar");
   const heroHp = $("hero-hp");
   const enemyHp = $("enemy-hp");
@@ -427,6 +451,10 @@
     enemyIcon.textContent = ENEMY_ICONS[stage.type];
     enemyTag.textContent = `${ENEMY_LABEL_PREFIX[stage.type]}`;
     enemyHp.style.width = "100%";
+    // ⑬ 新しい敵を右からスライドインさせ、面が進んでいる実感を出す
+    enemyFighter.classList.remove("exit");
+    void enemyFighter.offsetWidth;
+    enemyFighter.classList.add("enter");
     // 勇者側のバーは「HP」ではなく経験値ゲージ(#19)なので面開始時にリセットしない
     timerBar.style.width = "100%";
     timerBar.style.background = "var(--accent)";
@@ -492,6 +520,10 @@
         updateHud();
         if (leveledUp) showLevelUp();
         if (upgradedGear) showGearUpgrade(upgradedGear);
+        // ⑬ 倒した敵を左に退場させてから次の敵を呼び込む
+        enemyFighter.classList.remove("enter");
+        void enemyFighter.offsetWidth;
+        enemyFighter.classList.add("exit");
         state.reachedLabel = stage.label;
         state.stageIndex++;
         setTimeout(runStage, 250);
