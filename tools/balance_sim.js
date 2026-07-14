@@ -16,17 +16,35 @@ const EXP_BASE = 20;
 const EXP_CURVE = 1.3;
 const EXP_PER_STAGE = 10;
 
+const CRIT_TABLE = [
+  { key: "normal", mult: 1.0, weight: 70 },
+  { key: "crit1",  mult: 1.2, weight: 20 },
+  { key: "crit2",  mult: 1.5, weight: 7 },
+  { key: "crit3",  mult: 2.0, weight: 2.5 },
+  { key: "crit4",  mult: 5.0, weight: 0.5 },
+];
+const HIT_INTERVAL_BY_TYPE = { normal: 260, mid: 230, big: 200, demon: 170 };
+
 function rollTalent() {
   const r = (Math.random() + Math.random()) / 2;
   return +(TALENT_MIN + r * (TALENT_MAX - TALENT_MIN)).toFixed(2);
 }
 function rollLuck() { return Math.random(); }
-function rollGear(luck) {
-  const boosted = GEAR_TABLE.map((g, i) => ({ ...g, w: g.weight * (1 + luck * i * 1.8) }));
-  const total = boosted.reduce((s, g) => s + g.w, 0);
-  let r = Math.random() * total;
-  for (const g of boosted) { if (r < g.w) return g; r -= g.w; }
-  return boosted[0];
+// luckは1プレイ中ずっと一定のため、重み付けテーブルは1回だけ構築して使い回す
+// (ヒットのたびに毎回 .map() し直すと300万試行規模のシミュレーションが
+// 極端に遅くなる。index.htmlのbuildLuckRoller/rollFromTableと同じ設計)。
+function buildLuckRoller(table, luck) {
+  const boosted = table.map((item, i) => ({ ...item, w: item.weight * (1 + luck * i * 1.8) }));
+  const total = boosted.reduce((s, item) => s + item.w, 0);
+  return { boosted, total };
+}
+function rollFromTable(roller) {
+  let r = Math.random() * roller.total;
+  for (const item of roller.boosted) {
+    if (r < item.w) return item;
+    r -= item.w;
+  }
+  return roller.boosted[roller.boosted.length - 1];
 }
 function buildStageSequence() {
   const seq = [];
@@ -40,27 +58,46 @@ function buildStageSequence() {
     seq.push({ label: `第${n}面(中ボス)`, type: "mid", timeLimit: 5, hpBase: 45 + block * 18 });
     seq.push({ label: `大ボス${block}`, type: "big", timeLimit: 8, hpBase: 70 + block * 35 });
   }
-  seq.push({ label: "魔王", type: "demon", timeLimit: 10, hpBase: 520 });
+  seq.push({ label: "魔王", type: "demon", timeLimit: 10, hpBase: 650 });
   return seq;
 }
 function computeHeroDps(level, gear) {
   return BASE_ATK * (1 + (level - 1) * LEVEL_BONUS) * gear.atkMul;
 }
+// ㉑ ゲーム本体と同じく、1面ごとにヒット単位でクリティカルを抽選し実ダメージを
+// 積み上げる。事前計算(hpBase/dps)ではなく、実際にヒットを重ねて制限時間内に
+// 倒しきれたかどうかで判定する(index.htmlのframe()と同じロジック)。
+function simulateStage(dps, critRoller, s) {
+  const hitInterval = HIT_INTERVAL_BY_TYPE[s.type] || 260;
+  const totalDurationMs = s.timeLimit * 1000;
+  const baseDamagePerHit = dps * (hitInterval / 1000);
+  const numHits = Math.floor(totalDurationMs / hitInterval);
+  let dealt = 0;
+  for (let h = 0; h < numHits; h++) {
+    const crit = rollFromTable(critRoller);
+    dealt += baseDamagePerHit * crit.mult;
+    if (dealt >= s.hpBase) return true;
+  }
+  return false;
+}
+
 function runOne() {
   const talent = rollTalent();
   const luck = rollLuck();
+  const gearRoller = buildLuckRoller(GEAR_TABLE, luck);
+  const critRoller = buildLuckRoller(CRIT_TABLE, luck);
   let level = 1, exp = 0, expToNext = EXP_BASE, gear = GEAR_TABLE[0];
   const stages = buildStageSequence();
   let reachedIndex = -1;
   for (let i = 0; i < stages.length; i++) {
     const s = stages[i];
     const dps = computeHeroDps(level, gear);
-    if (s.hpBase / dps > s.timeLimit) return { reachedIndex: i, cleared: false };
+    if (!simulateStage(dps, critRoller, s)) return { reachedIndex: i, cleared: false };
     reachedIndex = i;
     const expGain = EXP_PER_STAGE * (s.type === "normal" ? 1 : s.type === "big" ? 3 : s.type === "demon" ? 6 : 2);
     exp += expGain * talent;
     while (exp >= expToNext) { exp -= expToNext; level++; expToNext = Math.round(expToNext * EXP_CURVE); }
-    const dropped = rollGear(luck);
+    const dropped = rollFromTable(gearRoller);
     const curIdx = GEAR_TABLE.findIndex((g) => g.key === gear.key);
     const dropIdx = GEAR_TABLE.findIndex((g) => g.key === dropped.key);
     if (dropIdx > curIdx) gear = dropped;
