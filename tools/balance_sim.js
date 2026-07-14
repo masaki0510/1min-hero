@@ -25,6 +25,14 @@ const CRIT_TABLE = [
 ];
 const HIT_INTERVAL_BY_TYPE = { normal: 260, mid: 230, big: 200, demon: 170 };
 
+// #35: 運によるレアモブ出現(index.htmlのRARE_MOB_TABLE等と同じ設計)
+const RARE_MOB_TABLE = [
+  { key: "normal", weight: 90 },
+  { key: "rareMob", weight: 10 },
+];
+const RARE_MOB_EXP_MULT = 2.5;
+const RARE_MOB_LUCK_BONUS = 0.4;
+
 function rollTalent() {
   const r = (Math.random() + Math.random()) / 2;
   return +(TALENT_MIN + r * (TALENT_MAX - TALENT_MIN)).toFixed(2);
@@ -86,38 +94,49 @@ function runOne() {
   const luck = rollLuck();
   const gearRoller = buildLuckRoller(GEAR_TABLE, luck);
   const critRoller = buildLuckRoller(CRIT_TABLE, luck);
+  const rareMobRoller = buildLuckRoller(RARE_MOB_TABLE, luck);
+  const rareMobGearRoller = buildLuckRoller(GEAR_TABLE, Math.min(1, luck + RARE_MOB_LUCK_BONUS));
   let level = 1, exp = 0, expToNext = EXP_BASE, gear = GEAR_TABLE[0];
   const stages = buildStageSequence();
   let reachedIndex = -1;
+  let rareMobEncounters = 0;
   for (let i = 0; i < stages.length; i++) {
     const s = stages[i];
     const dps = computeHeroDps(level, gear);
-    if (!simulateStage(dps, critRoller, s)) return { reachedIndex: i, cleared: false };
+    if (!simulateStage(dps, critRoller, s)) return { reachedIndex: i, cleared: false, rareMobEncounters };
     reachedIndex = i;
-    const expGain = EXP_PER_STAGE * (s.type === "normal" ? 1 : s.type === "big" ? 3 : s.type === "demon" ? 6 : 2);
-    exp += expGain * talent;
+    const isRareMob = s.type === "normal" && rollFromTable(rareMobRoller).key === "rareMob";
+    if (isRareMob) rareMobEncounters++;
+    const baseExpGain = EXP_PER_STAGE * (s.type === "normal" ? 1 : s.type === "big" ? 3 : s.type === "demon" ? 6 : 2);
+    exp += (isRareMob ? baseExpGain * RARE_MOB_EXP_MULT : baseExpGain) * talent;
     while (exp >= expToNext) { exp -= expToNext; level++; expToNext = Math.round(expToNext * EXP_CURVE); }
-    const dropped = rollFromTable(gearRoller);
+    const dropped = rollFromTable(isRareMob ? rareMobGearRoller : gearRoller);
     const curIdx = GEAR_TABLE.findIndex((g) => g.key === gear.key);
     const dropIdx = GEAR_TABLE.findIndex((g) => g.key === dropped.key);
     if (dropIdx > curIdx) gear = dropped;
   }
-  return { reachedIndex, cleared: true };
+  return { reachedIndex, cleared: true, rareMobEncounters };
 }
 
 function simulate(n) {
   let cleared = 0;
+  let totalRareMobEncounters = 0;
+  let runsWithRareMob = 0;
   const failStageCount = {};
   for (let i = 0; i < n; i++) {
     const r = runOne();
     if (r.cleared) cleared++;
     else failStageCount[r.reachedIndex] = (failStageCount[r.reachedIndex] || 0) + 1;
+    totalRareMobEncounters += r.rareMobEncounters;
+    if (r.rareMobEncounters > 0) runsWithRareMob++;
   }
-  return { clearRate: cleared / n, failStageCount };
+  return { clearRate: cleared / n, failStageCount, totalRareMobEncounters, runsWithRareMob };
 }
 
 const N = 300000;
-const { clearRate, failStageCount } = simulate(N);
+const { clearRate, failStageCount, totalRareMobEncounters, runsWithRareMob } = simulate(N);
 console.log(`試行回数: ${N}`);
 console.log(`魔王撃破率: ${(clearRate * 100).toFixed(2)}% (目標 5〜10%)`);
 console.log("敗北ステージ分布(index: 回数):", failStageCount);
+console.log(`平均レアモブ遭遇回数/run: ${(totalRareMobEncounters / N).toFixed(2)}`);
+console.log(`レアモブに1回以上遭遇したrunの割合: ${((runsWithRareMob / N) * 100).toFixed(1)}%`);

@@ -103,6 +103,11 @@
     width: 100px; height: 100px; border-radius: 50%; filter: blur(14px);
     opacity: 0.55; z-index: -1;
   }
+  /* #35: レアモブは通常敵と同じ強さのまま(HPは変えない)、見た目と報酬だけで
+     「運が良い」ことを伝えるボーナス敵。装備オーラ(#6)と同系統の
+     金色オーラ+専用ネームタグ色で見分けられるようにする。 */
+  #enemy.rare-mob #enemy-aura { background: var(--legend); opacity: 0.5; }
+  .rare-mob-tag { color: var(--legend); font-weight: bold; }
   .stick { font-size: 42px; display: block; animation: idle-bob 1.6s ease-in-out infinite; }
   /* 勇者はドット絵アバターに差し替え(仮運用)。敵は引き続き絵文字のため
      トーンが一致しないのは把握済み。今後、敵側の絵柄方針が決まり次第見直す。 */
@@ -225,7 +230,9 @@
         <div class="hpbar-wrap"><div class="hpbar" id="hero-hp"></div></div>
       </div>
       <div class="fighter" id="enemy">
+        <div class="aura" id="enemy-aura"></div>
         <span class="stick" id="enemy-icon">👹</span>
+        <div class="gear-toast" id="rare-mob-toast">✨ レアモブ出現! ✨</div>
         <div class="dmg-fx" id="enemy-dmg"></div>
         <div class="crit-fx" id="crit-fx">会心の一撃!</div>
         <div class="name-tag" id="enemy-tag">-</div>
@@ -308,6 +315,28 @@
   ];
 
   /* =========================================================
+   * #35 運によるレアモブ出現(仮 — 実プレイで頻度調整する前提)
+   *
+   * ★設計方針: レアモブは通常の敵とHP・強さを変えない「ボーナス敵」に
+   * した(HPを上げて強くする案もissueで検討されたが、そちらは
+   * 「★勝敗はガチ計算」の原則上、レアモブに遭遇した回だけ不利になり
+   * うる。運が良い結果として出てくるものが時にプレイヤーを負けさせる
+   * のは、運要素の設計として不誠実。良い運は常に純粋なプラスであるべき、
+   * という判断でボーナス敵側を採用した)。
+   *
+   * 出現対象は通常面(6面/run)のみとし、装備ガチャ・クリティカルと同じ
+   * buildLuckRoller/rollFromTableの重み付け抽選を再利用する。運が低くても
+   * 完全に0%にはせず(通常面1面あたり10%〜24%)、「何面かに1回出会う」
+   * 体感を狙う(tools/balance_simで平均遭遇回数を検証済み)。
+   * ========================================================= */
+  const RARE_MOB_TABLE = [
+    { key: "normal", weight: 90 },
+    { key: "rareMob", weight: 10 },
+  ];
+  const RARE_MOB_EXP_MULT = 2.5; // 経験値ボーナス倍率
+  const RARE_MOB_LUCK_BONUS = 0.4; // 装備ドロップ抽選で一時的に運が上振れたように補正する量
+
+  /* =========================================================
    * ステージ構成
    * 各ブロック = 通常面2 + 中ボス1(計3面)→ 大ボス、を3ブロック繰り返し、
    * 最後に魔王。仕様書の「3面ごとに大ボス」「各面の最後に中ボス」を
@@ -360,6 +389,10 @@
       // ここで一度だけ構築して使い回す
       gearRoller: buildLuckRoller(GEAR_TABLE, luck),
       critRoller: buildLuckRoller(CRIT_TABLE, luck),
+      rareMobRoller: buildLuckRoller(RARE_MOB_TABLE, luck),
+      // #35: レアモブ撃破時の装備ドロップは、運が一時的に上振れたかのように
+      // 補正したテーブルで抽選する(通常のgearRollerとは別に保持)
+      rareMobGearRoller: buildLuckRoller(GEAR_TABLE, Math.min(1, luck + RARE_MOB_LUCK_BONUS)),
       level: 1, exp: 0, expToNext: 20,
       gear: GEAR_TABLE[0], // 初期はコモン
       stages: buildStageSequence(),
@@ -367,6 +400,7 @@
       reachedLabel: "開始前",
       lastCause: null,
       cleared: false,
+      isRareMobStage: false,
     };
   }
 
@@ -390,6 +424,8 @@
   const critFx = $("crit-fx");
   const heroLevelUp = $("hero-levelup");
   const gearToast = $("gear-toast");
+  const enemyAura = $("enemy-aura");
+  const rareMobToast = $("rare-mob-toast");
   const heroAura = $("hero-aura");
   const heroGearIcon = $("hero-gear-icon");
   const statTalent = $("stat-talent");
@@ -436,8 +472,8 @@
     return leveledUp;
   }
 
-  function maybeDropGear() {
-    const dropped = rollFromTable(state.gearRoller);
+  function maybeDropGear(roller) {
+    const dropped = rollFromTable(roller || state.gearRoller);
     const currentRankIndex = GEAR_TABLE.findIndex((g) => g.key === state.gear.key);
     const droppedIndex = GEAR_TABLE.findIndex((g) => g.key === dropped.key);
     if (droppedIndex > currentRankIndex) {
@@ -472,8 +508,14 @@
     stageLabel.textContent = stage.label;
     // #34: 道中(通常/中ボス/大ボス)はkusa.png、魔王戦のみmao.pngに切り替える
     arena.classList.toggle("bg-demon", stage.type === "demon");
+    // #35: レアモブは通常面のみ抽選対象(中ボス・大ボス・魔王は面それぞれの
+    // 個性を保ちたいため対象外)
+    state.isRareMobStage = stage.type === "normal" && rollFromTable(state.rareMobRoller).key === "rareMob";
     enemyIcon.textContent = ENEMY_ICONS[stage.type];
-    enemyTag.textContent = `${ENEMY_LABEL_PREFIX[stage.type]}`;
+    enemyTag.textContent = state.isRareMobStage ? "レアモブ" : `${ENEMY_LABEL_PREFIX[stage.type]}`;
+    enemyTag.className = state.isRareMobStage ? "name-tag rare-mob-tag" : "name-tag";
+    enemyFighter.classList.toggle("rare-mob", state.isRareMobStage);
+    if (state.isRareMobStage) showRareMobToast();
     enemyHp.style.width = "100%";
     // ⑬ 新しい敵を右からスライドインさせ、面が進んでいる実感を出す
     enemyFighter.classList.remove("exit");
@@ -550,8 +592,10 @@
 
       if (dealtDamage >= enemyHpTotal) {
         // 倒しきった → クリア処理へ
-        const leveledUp = gainExp(BASE_EXP_PER_STAGE * (stage.type === "normal" ? 1 : stage.type === "big" ? 3 : stage.type === "demon" ? 6 : 2));
-        const upgradedGear = maybeDropGear();
+        const baseExp = BASE_EXP_PER_STAGE * (stage.type === "normal" ? 1 : stage.type === "big" ? 3 : stage.type === "demon" ? 6 : 2);
+        // #35: レアモブは経験値ボーナス+装備ドロップ抽選の運を一時的に上振れさせる
+        const leveledUp = gainExp(state.isRareMobStage ? baseExp * RARE_MOB_EXP_MULT : baseExp);
+        const upgradedGear = maybeDropGear(state.isRareMobStage ? state.rareMobGearRoller : state.gearRoller);
         updateHud();
         if (leveledUp) showLevelUp();
         if (upgradedGear) showGearUpgrade(upgradedGear);
@@ -598,6 +642,13 @@
     pulse(gearToast, 1000, "levelupPop");
     pulse(heroGearIcon, 500, "gearBounce");
     pulse(heroAura, 600, "auraFlash");
+  }
+
+  // #35: レアモブ出現の瞬間だけ演出する。経験値・装備ドロップのボーナスは
+  // 撃破後に静かに反映されるだけなので、出現時にひと目でわかる合図を出す。
+  function showRareMobToast() {
+    pulse(rareMobToast, 1000, "levelupPop");
+    pulse(enemyAura, 600, "auraFlash");
   }
 
   // #29: 高速ヒット時(魔王戦は毎秒最大約6ヒット)、1ヒットあたり最大4要素に
