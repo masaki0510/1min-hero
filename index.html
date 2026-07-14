@@ -141,6 +141,25 @@
     50% { opacity: 1; transform: translate(-50%,-90%) scale(1); }
     100% { opacity: 0; transform: translate(-50%,-120%) scale(0.95); }
   }
+  /* ㉑ クリティカル倍率が高いほど、装備レアリティと同じ色調で目立たせる。
+     「運が効く場所」として装備ドロップと視覚的な語彙を揃える狙い。 */
+  .dmg-fx.crit-crit1 { color: var(--rare); font-size: 1.15em; }
+  .dmg-fx.crit-crit2 { color: var(--epic); font-size: 1.3em; }
+  .dmg-fx.crit-crit3 { color: var(--legend); font-size: 1.5em; }
+  .dmg-fx.crit-crit4 { color: #ff5d5d; font-size: 1.9em; text-shadow: 0 0 8px rgba(255,93,93,0.9); }
+  .crit-fx {
+    position: absolute; top: -22px; left: 50%; transform: translate(-50%, 0);
+    font-size: 0.95em; font-weight: bold; color: #ff5d5d; white-space: nowrap;
+    opacity: 0; pointer-events: none;
+    text-shadow: 0 0 8px rgba(255, 93, 93, 0.9);
+  }
+  .crit-fx.show { animation: crit-pop 0.7s ease-out; }
+  @keyframes crit-pop {
+    0% { opacity: 0; transform: translate(-50%, 6px) scale(0.6) rotate(-4deg); }
+    25% { opacity: 1; transform: translate(-50%, -8px) scale(1.25) rotate(3deg); }
+    70% { opacity: 1; transform: translate(-50%, -8px) scale(1.05) rotate(0deg); }
+    100% { opacity: 0; transform: translate(-50%, -20px) scale(1) rotate(0deg); }
+  }
   .levelup-fx {
     position: absolute; top: -18px; left: 50%; transform: translate(-50%, 0);
     font-size: 0.85em; font-weight: bold; color: var(--legend);
@@ -224,6 +243,7 @@
         <span class="stick" id="enemy-icon">👹</span>
         <div class="hit-fx" id="enemy-hit">!</div>
         <div class="dmg-fx" id="enemy-dmg"></div>
+        <div class="crit-fx" id="crit-fx">会心の一撃!</div>
         <div class="name-tag" id="enemy-tag">-</div>
         <div class="hpbar-wrap"><div class="hpbar" id="enemy-hp"></div></div>
       </div>
@@ -273,21 +293,35 @@
     return Math.random();
   }
 
-  // 運の値が高いほど上位ランクの重みが増すよう補正して1回抽選
-  function rollGear(luck) {
-    const boosted = GEAR_TABLE.map((g, i) => {
-      // luckが高いほど上位ランク(配列後方)の重みを増幅
-      const boost = 1 + luck * i * 1.8;
-      return { ...g, w: g.weight * boost };
-    });
-    const total = boosted.reduce((s, g) => s + g.w, 0);
-    let r = Math.random() * total;
-    for (const g of boosted) {
-      if (r < g.w) return g;
-      r -= g.w;
-    }
-    return boosted[0];
+  /* =========================================================
+   * ㉑ 「運が高いほど上位枠を引きやすい」重み付け抽選を装備ガチャと
+   * クリティカルの両方で共有する。luckは1プレイ中ずっと一定の値なので、
+   * 重み付けテーブルは面ごと・ヒットごとに毎回作り直すのではなく、
+   * プレイ開始時に一度だけ構築して使い回す(ヒット単位で毎回オブジェクトを
+   * 生成し直すと、特に高速ヒットの魔王戦でGC負荷が無視できなくなるため)。
+   * ========================================================= */
+  function buildLuckRoller(table, luck) {
+    const boosted = table.map((item, i) => ({ ...item, w: item.weight * (1 + luck * i * 1.8) }));
+    const total = boosted.reduce((s, item) => s + item.w, 0);
+    return { boosted, total };
   }
+
+  function rollFromTable(roller) {
+    let r = Math.random() * roller.total;
+    for (const item of roller.boosted) {
+      if (r < item.w) return item;
+      r -= item.w;
+    }
+    return roller.boosted[roller.boosted.length - 1];
+  }
+
+  const CRIT_TABLE = [
+    { key: "normal", mult: 1.0, weight: 70 },
+    { key: "crit1",  mult: 1.2, weight: 20 },
+    { key: "crit2",  mult: 1.5, weight: 7  },
+    { key: "crit3",  mult: 2.0, weight: 2.5 },
+    { key: "crit4",  mult: 5.0, weight: 0.5 },
+  ];
 
   /* =========================================================
    * ステージ構成
@@ -308,7 +342,7 @@
       seq.push({ label: `第${n}面(中ボス)`, type: "mid", timeLimit: 5, hpBase: 45 + block * 18 });
       seq.push({ label: `大ボス${block}`, type: "big", timeLimit: 8, hpBase: 70 + block * 35 });
     }
-    seq.push({ label: "魔王", type: "demon", timeLimit: 10, hpBase: 520 });
+    seq.push({ label: "魔王", type: "demon", timeLimit: 10, hpBase: 650 });
     return seq;
   }
 
@@ -338,6 +372,10 @@
     const luck = rollLuck();
     return {
       talent, luck,
+      // luckは以後このプレイ中ずっと変わらないため、重み付け抽選機は
+      // ここで一度だけ構築して使い回す
+      gearRoller: buildLuckRoller(GEAR_TABLE, luck),
+      critRoller: buildLuckRoller(CRIT_TABLE, luck),
       level: 1, exp: 0, expToNext: 20,
       gear: GEAR_TABLE[0], // 初期はコモン
       stages: buildStageSequence(),
@@ -366,6 +404,7 @@
   const heroHit = $("hero-hit");
   const enemyHit = $("enemy-hit");
   const enemyDmg = $("enemy-dmg");
+  const critFx = $("crit-fx");
   const heroLevelUp = $("hero-levelup");
   const gearToast = $("gear-toast");
   const heroAura = $("hero-aura");
@@ -415,7 +454,7 @@
   }
 
   function maybeDropGear() {
-    const dropped = rollGear(state.luck);
+    const dropped = rollFromTable(state.gearRoller);
     const currentRankIndex = GEAR_TABLE.findIndex((g) => g.key === state.gear.key);
     const droppedIndex = GEAR_TABLE.findIndex((g) => g.key === dropped.key);
     if (droppedIndex > currentRankIndex) {
@@ -466,8 +505,6 @@
 
     const dps = computeHeroDps(state.level, state.gear);
     const enemyHpTotal = stage.hpBase;
-    const timeToKill = enemyHpTotal / dps; // 秒
-    const willClear = timeToKill <= stage.timeLimit;
 
     // ④ ペーシング(仮): 面の尺が長いほど手数を増やし、終盤ほど畳みかける
     // ような密度にする。中ボス以降は「攻防の応酬」に見せるため、勇者側の
@@ -479,9 +516,11 @@
     let hitCount = 0;
     let dangerTriggered = false;
     let dealtDamage = 0;
-    // ⑯ 1ヒットあたりのダメージ量。dps(秒間)× ヒット間隔(秒)で、
-    // 「連続的な計算」を崩さずにヒット単位の階段状の減りに変換する。
-    const damagePerHit = dps * (hitInterval / 1000);
+    // ㉑ クリティカルの導入により、1ヒットの実ダメージはもう「事前に決まった
+    // 一定値」ではなく毎ヒット乱数で決まる。そのため勝敗も面開始時の事前計算
+    // ではなく、実際に積み上がったダメージが制限時間内に敵HPへ届いたかどうかで
+    // その場で判定する(★演出のための忖度をしない、をより徹底した形)。
+    const baseDamagePerHit = dps * (hitInterval / 1000);
 
     function frame(now) {
       const elapsed = now - startTime;
@@ -490,11 +529,14 @@
       const currentHit = Math.floor(elapsed / hitInterval);
       if (currentHit !== hitCount) {
         hitCount = currentHit;
-        dealtDamage = Math.min(enemyHpTotal, dealtDamage + damagePerHit);
+        const crit = rollFromTable(state.critRoller);
+        const hitDamage = baseDamagePerHit * crit.mult;
+        dealtDamage = Math.min(enemyHpTotal, dealtDamage + hitDamage);
         enemyHp.style.width = `${Math.max(0, (1 - dealtDamage / enemyHpTotal) * 100)}%`;
 
-        const shownDamage = Math.max(1, Math.round(damagePerHit));
+        const shownDamage = Math.max(1, Math.round(hitDamage));
         enemyDmg.textContent = `-${shownDamage}`;
+        enemyDmg.className = `dmg-fx ${crit.mult > 1 ? "crit-" + crit.key : ""}`;
         const fxDuration = Math.min(hitInterval * 0.85, 350);
         pulse(enemyDmg, fxDuration);
         // 偶数打目は勇者側のモーションを挟み、攻防の応酬に見せる。
@@ -505,15 +547,22 @@
         // 敵の被弾リアクションは「!」演出とは独立して毎ヒット発火する。
         pulse(heroStick, fxDuration);
         pulse(enemyIcon, fxDuration);
+        // ㉑ 最上位クリティカル(5倍)だけは「会心の一撃!」として特別扱いする
+        if (crit.mult >= 5) showCritical();
       }
 
-      // 残り時間が少なく、まだ倒しきれていない場合はタイマーを警告色にする
-      if (!dangerTriggered && !willClear && displayElapsed / totalDurationMs > 0.7) {
+      // ㉑ 残り時間に対して敵HPの減りが追いついていない(このままのペースでは
+      // 間に合わない)場合にタイマーを警告色にする。事前計算の結果ではなく、
+      // その場その場の実際の進み具合で判定するため、クリティカル運次第で
+      // 警告が出たり出なかったりする。
+      const remainingTimeFraction = 1 - displayElapsed / totalDurationMs;
+      const remainingHpFraction = 1 - dealtDamage / enemyHpTotal;
+      if (!dangerTriggered && remainingTimeFraction < 0.3 && remainingHpFraction > remainingTimeFraction) {
         dangerTriggered = true;
         timerBar.style.background = "var(--hp)";
       }
 
-      if (willClear && dealtDamage >= enemyHpTotal) {
+      if (dealtDamage >= enemyHpTotal) {
         // 倒しきった → クリア処理へ
         const leveledUp = gainExp(BASE_EXP_PER_STAGE * (stage.type === "normal" ? 1 : stage.type === "big" ? 3 : stage.type === "demon" ? 6 : 2));
         const upgradedGear = maybeDropGear();
@@ -530,7 +579,7 @@
         return;
       }
 
-      if (!willClear && displayElapsed >= totalDurationMs) {
+      if (displayElapsed >= totalDurationMs) {
         // タイムアップ → 敗北
         state.reachedLabel = stage.label;
         state.lastCause = pickLossCause();
@@ -549,6 +598,12 @@
     heroLevelUp.classList.remove("show");
     void heroLevelUp.offsetWidth;
     heroLevelUp.classList.add("show");
+  }
+
+  // ㉑ 最上位クリティカル(5倍)だけの特別演出。装備のレジェンダリー同様、
+  // 最も重み(確率)が低い枠なので、専用の派手さで「引いた」感を出す。
+  function showCritical() {
+    pulse(critFx, 700);
   }
 
   // ⑭ 装備がランクアップした瞬間だけ演出する。ランクアップしなかった
