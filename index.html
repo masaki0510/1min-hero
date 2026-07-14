@@ -72,6 +72,22 @@
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-4px); }
   }
+  /* ⑮ 勇者の攻撃モーション・敵の被弾リアクション。
+     idle-bobと同時に走らせると transform が競合するため、id+.show の
+     組み合わせで一時的にアイドルアニメーションを上書きする。 */
+  #hero-stick.show { animation: hero-swing var(--hitfx-dur, 0.25s) ease-out; }
+  @keyframes hero-swing {
+    0% { transform: translateX(0) rotate(0deg); }
+    35% { transform: translateX(10px) rotate(-22deg); }
+    100% { transform: translateX(0) rotate(0deg); }
+  }
+  #enemy-icon.show { animation: enemy-flinch var(--hitfx-dur, 0.25s) ease-out; }
+  @keyframes enemy-flinch {
+    0% { transform: translateX(0) rotate(0deg); }
+    30% { transform: translateX(-6px) rotate(6deg); }
+    65% { transform: translateX(3px) rotate(-3deg); }
+    100% { transform: translateX(0) rotate(0deg); }
+  }
   .gear-icon {
     position: absolute; top: 4px; right: -6px; font-size: 20px;
     filter: drop-shadow(0 0 3px rgba(0,0,0,0.6));
@@ -300,6 +316,7 @@
   const enemyHp = $("enemy-hp");
   const enemyTag = $("enemy-tag");
   const enemyIcon = $("enemy-icon");
+  const heroStick = $("hero-stick");
   const heroHit = $("hero-hit");
   const enemyHit = $("enemy-hit");
   const enemyDmg = $("enemy-dmg");
@@ -431,6 +448,10 @@
         // アニメーション時間はヒット間隔より必ず短くし、次のヒットが
         // 来る前に完走させる(#17: 魔王戦の高速ヒットでの重なり対策)。
         pulse(hitCount % 2 === 0 ? heroHit : enemyHit, fxDuration);
+        // ⑮ 実際のダメージは毎ヒット発生するため、勇者の振りかぶり・
+        // 敵の被弾リアクションは「!」演出とは独立して毎ヒット発火する。
+        pulse(heroStick, fxDuration);
+        pulse(enemyIcon, fxDuration);
       }
 
       // 残り時間が少なく、まだ倒しきれていない場合はタイマーを警告色にする
