@@ -150,9 +150,9 @@
   const TALENT_MIN = 0.5, TALENT_MAX = 3.0; // 経験値倍率レンジ
   const GEAR_TABLE = [
     { rank: "コモン",       key: "common", weight: 70, atkMul: 1.00 },
-    { rank: "レア",         key: "rare",   weight: 20, atkMul: 1.25 },
-    { rank: "エピック",     key: "epic",   weight: 8,  atkMul: 1.6  },
-    { rank: "レジェンダリー", key: "legend", weight: 2,  atkMul: 2.2  },
+    { rank: "レア",         key: "rare",   weight: 20, atkMul: 1.3  },
+    { rank: "エピック",     key: "epic",   weight: 8,  atkMul: 1.7  },
+    { rank: "レジェンダリー", key: "legend", weight: 2,  atkMul: 2.4  },
   ];
 
   // 山型分布(三角分布)で 0.5〜3.0 の間に才能を落とす
@@ -183,39 +183,22 @@
   }
 
   /* =========================================================
-   * ステージ構成
+   * ステージ構成(通常面3つごとに大ボス、最後は魔王)
    * ========================================================= */
-  // type: normal / mid / big / demon
-  function buildStages() {
-    const stages = [];
-    let stageNo = 0;
-    for (let set = 1; set <= 3; set++) {
-      for (let i = 0; i < 3; i++) {
-        stageNo++;
-        stages.push({ no: stageNo, type: "normal", timeLimit: 3, hpBase: 30 });
-      }
-      stages.push({ no: stageNo + 0.5, type: "mid", timeLimit: 5, hpBase: 90 });
-    }
-    stages.push({ no: 99, type: "big", timeLimit: 8, hpBase: 220 });
-    stages.push({ no: 100, type: "demon", timeLimit: 10, hpBase: 420 });
-    return stages;
-  }
-  // 上記だと3セットで9通常+3中ボスになり大ボスが1体だけになってしまうため、
-  // 仕様(3面ごとに大ボス)に合わせて構成し直す
   function buildStageSequence() {
     const seq = [];
     let n = 0;
     for (let block = 1; block <= 3; block++) {
       for (let i = 0; i < 3; i++) {
         n++;
-        seq.push({ label: `第${n}面`, type: "normal", timeLimit: 3, hpBase: 26 + n * 4 });
+        seq.push({ label: `第${n}面`, type: "normal", timeLimit: 3, hpBase: 10 + (n - 1) * 2.2 });
       }
       const isLast = block === 3;
       seq.push({
         label: isLast ? "魔王" : `大ボス ${block}`,
         type: isLast ? "demon" : "big",
         timeLimit: isLast ? 10 : 8,
-        hpBase: isLast ? 480 : 150 + block * 60,
+        hpBase: isLast ? 450 : 60 + block * 30,
       });
     }
     return seq;
@@ -233,7 +216,7 @@
 
   function computeHeroDps(level, gear) {
     // レベルは才能(経験値倍率)の結果として上がる → レベル依存の攻撃力上昇
-    const levelMul = 1 + (level - 1) * 0.18;
+    const levelMul = 1 + (level - 1) * 0.22;
     return BASE_ATK * levelMul * gear.atkMul;
   }
 
