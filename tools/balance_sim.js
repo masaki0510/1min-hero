@@ -54,6 +54,13 @@ function rollFromTable(roller) {
   }
   return roller.boosted[roller.boosted.length - 1];
 }
+// #43: ブロック2・3にのみ線形+二次の追加項を乗せ、中盤のノーリスク区間を解消(index.htmlのmidBossHp/bigBossHpと同じ式)
+function midBossHp(block) {
+  return 45 + block * 18 + 18 * (block - 1) + 6 * Math.pow(block - 1, 2);
+}
+function bigBossHp(block) {
+  return 70 + block * 35 + 34 * (block - 1) + 12 * Math.pow(block - 1, 2);
+}
 function buildStageSequence() {
   const seq = [];
   let n = 0;
@@ -63,8 +70,8 @@ function buildStageSequence() {
       seq.push({ label: `第${n}面`, type: "normal", timeLimit: 3, hpBase: 10 + (n - 1) * 2.2 });
     }
     n++;
-    seq.push({ label: `第${n}面(中ボス)`, type: "mid", timeLimit: 5, hpBase: 45 + block * 18 });
-    seq.push({ label: `大ボス${block}`, type: "big", timeLimit: 8, hpBase: 70 + block * 35 });
+    seq.push({ label: `第${n}面(中ボス)`, type: "mid", timeLimit: 5, hpBase: midBossHp(block) });
+    seq.push({ label: `大ボス${block}`, type: "big", timeLimit: 8, hpBase: bigBossHp(block) });
   }
   seq.push({ label: "魔王", type: "demon", timeLimit: 10, hpBase: 650 });
   return seq;
