@@ -73,6 +73,14 @@
     background: linear-gradient(180deg, rgba(15,16,32,0.35), rgba(15,16,32,0.55));
     pointer-events: none;
   }
+  /* #55: 開始直後、才能・運の組み合わせ(=今回の運命)をひと目で
+     伝える一瞬のフラッシュ。#30でエンディング側に付けた遷移演出と
+     対になる「始まり側」の演出。装備レアリティと同じ色の語彙
+     (コモン〜レジェンダリー)を流用し、運が良いほど明るく煌めく。 */
+  .fate-flash {
+    position: absolute; inset: 0; pointer-events: none; z-index: 5;
+    opacity: 0;
+  }
   /* ⑬ 地面のスクロールで「前に進んでいる」実感を常時出す。
      大きなカメラ演出は避け、控えめな並進表現に留める。 */
   #ground {
@@ -223,6 +231,7 @@
     <div id="timer-wrap"><div id="timer-bar"></div></div>
     <div id="stage-label">-</div>
     <div id="arena">
+      <div class="fate-flash" id="fate-flash"></div>
       <div id="ground"></div>
       <div class="fighter" id="hero">
         <div class="aura" id="hero-aura"></div>
@@ -445,6 +454,7 @@
   const rareMobToast = $("rare-mob-toast");
   const heroAura = $("hero-aura");
   const heroGearIcon = $("hero-gear-icon");
+  const fateFlash = $("fate-flash");
   const statTalent = $("stat-talent");
   const statLuck = $("stat-luck");
   const statLevel = $("stat-level");
@@ -452,6 +462,25 @@
 
   const AURA_COLOR = { common: "transparent", rare: "#5dd9ff", epic: "#c77dff", legend: "#ffd166" };
   const RANK_CLASS = { common: "rank-common", rare: "rank-rare", epic: "rank-epic", legend: "rank-legend" };
+  // #55: 開始直後のフラッシュ用。装備レアリティと同じ4段階の色語彙を、
+  // 才能・運という「今回の運命」そのものにも適用する。AURA_COLORのcommonは
+  // 装備なし=transparentだが、こちらは常に何かしら見える必要があるため
+  // 別テーブルとして持つ。
+  const FATE_FLASH_COLOR = {
+    common: "rgba(154,160,176,0.28)",
+    rare: "rgba(93,217,255,0.32)",
+    epic: "rgba(199,125,255,0.32)",
+    legend: "rgba(255,209,102,0.4)",
+  };
+  // 才能・運を均等加重で平均し、装備ガチャと同じ4段階に割り付ける
+  function fateQualityKey(talent, luck) {
+    const talentNorm = (talent - TALENT_MIN) / (TALENT_MAX - TALENT_MIN);
+    const quality = (talentNorm + luck) / 2;
+    if (quality >= 0.75) return "legend";
+    if (quality >= 0.5) return "epic";
+    if (quality >= 0.25) return "rare";
+    return "common";
+  }
   // ⑤ 視覚デザイン(仮): 装備の「有無・グレード」を武器アイコンでも表現する。
   // オーラの色差はスマホの屋外・明所だと視認しづらいため、形状で見分けが
   // つく武器アイコンを併用する。コモンは「素手」= 装備なしをそのまま表す。
@@ -505,6 +534,13 @@
    * ========================================================= */
   let rafId = null;
 
+  // #55: #30でエンディング側(勝敗確定→結果画面)には遷移演出を足したが、
+  // 対になる「始まりの瞬間」(タップ→ガチャ結果が決まった瞬間)には何も
+  // 演出がなく、才能・運という「今回の運命」を噛みしめる間がなかった。
+  // ステータスバーの数値表示はそのまま(#53)残しつつ、アリーナ全体を
+  // 一瞬だけ運命の質に応じた色でフラッシュさせ、バトル開始を少し遅らせる。
+  const FATE_REVEAL_MS = 450;
+
   function startGame() {
     state = newRunState();
     updateHud();
@@ -512,7 +548,14 @@
     resultScreen.style.display = "none";
     battleScreen.style.display = "flex";
     state.stageIndex = 0;
-    runStage();
+    showFateReveal();
+    setTimeout(runStage, FATE_REVEAL_MS);
+  }
+
+  function showFateReveal() {
+    const key = fateQualityKey(state.talent, state.luck);
+    fateFlash.style.background = `radial-gradient(circle, ${FATE_FLASH_COLOR[key]}, transparent 70%)`;
+    pulse(fateFlash, FATE_REVEAL_MS, "fateFlash");
   }
 
   function runStage() {
@@ -727,6 +770,12 @@
       { opacity: 1, offset: 0 },
       { opacity: 0.35, offset: 0.5 },
       { opacity: 1, offset: 1 },
+    ],
+    // #55: 開始直後の運命フラッシュ。完全な透明から一瞬だけ煌めき、また消える
+    fateFlash: [
+      { opacity: 0, offset: 0 },
+      { opacity: 1, offset: 0.35 },
+      { opacity: 0, offset: 1 },
     ],
     auraFlash: [
       { opacity: 0.55, filter: "blur(14px)", offset: 0 },
