@@ -612,6 +612,7 @@
         updateHud();
         if (leveledUp) showLevelUp();
         if (upgradedGear) showGearUpgrade(upgradedGear);
+        else showGearWhiff();
         // ⑬ 倒した敵を左に退場させてから次の敵を呼び込む
         enemyFighter.classList.remove("enter");
         void enemyFighter.offsetWidth;
@@ -655,6 +656,18 @@
     pulse(gearToast, 1000, "levelupPop");
     pulse(heroGearIcon, 500, "gearBounce");
     pulse(heroAura, 600, "auraFlash");
+  }
+
+  // #54: 装備ドロップ抽選は面クリアのたびに毎回行われているが、現在ランクを
+  // 超えなかった(据え置きだった)場合は従来なにも起きず、プレイヤーには
+  // ガチャを引いたことすら伝わらなかった。装備アイコン(heroGearIcon)は
+  // コモン装備時は空文字で非表示になるため対象にできず、代わりに常に
+  // 文字が表示されているステータスバーの「装備」表記を、アップグレード時の
+  // 派手な演出(gearBounce・トースト・オーラフラッシュ)とはっきり差がつく、
+  // ごく控えめな一瞬の沈み込みだけで知らせる(#28で戒めた情報過多を
+  // 再発させないため、面クリア時のみ・要素1つだけに絞る)。
+  function showGearWhiff() {
+    pulse(statGear, 300, "gearWhiff");
   }
 
   // #35: レアモブ出現の瞬間だけ演出する。経験値・装備ドロップのボーナスは
@@ -704,6 +717,12 @@
       { transform: "scale(0.4) rotate(-25deg)", opacity: 0, offset: 0 },
       { transform: "scale(1.4) rotate(8deg)", opacity: 1, offset: 0.5 },
       { transform: "scale(1) rotate(0deg)", opacity: 1, offset: 1 },
+    ],
+    // #54: アップグレード演出(gearBounce)とはっきり差がつく、地味な一瞬の沈み込みのみ
+    gearWhiff: [
+      { opacity: 1, offset: 0 },
+      { opacity: 0.35, offset: 0.5 },
+      { opacity: 1, offset: 1 },
     ],
     auraFlash: [
       { opacity: 0.55, filter: "blur(14px)", offset: 0 },
