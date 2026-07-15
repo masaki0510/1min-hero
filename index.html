@@ -211,6 +211,16 @@
   #result-rarity { font-size: 0.9em; color: var(--accent); font-weight: bold; }
   #result-detail { color: #cfd3ff; font-size: 0.95em; line-height: 1.6; max-width: 340px; }
   #result-stats { font-size: 0.8em; color: #8b90b8; }
+  /* #52: 魔王撃破(激レア)のみ、敗北画面と見分けがつく専用の演出を足す。
+     ①常時表示バッジ(👑)②戴冠のような登場モーション③淡く残り続ける
+     金色の後光、の3点に絞り、CLAUDE.mdの「派手な演出より静かな達成感」
+     の原則を踏まえて過剰な演出は避ける(新規画面や長い専用アニメーション
+     は追加しない)。 */
+  #result-badge { display: none; font-size: 2.4em; margin-bottom: -8px; }
+  #result-screen.cleared #result-badge { display: block; }
+  #result-screen.cleared {
+    background: radial-gradient(circle at 50% 30%, rgba(255,209,102,0.16), var(--bg) 75%);
+  }
   .rank-common { color: var(--common); }
   .rank-rare { color: var(--rare); }
   .rank-epic { color: var(--epic); }
@@ -261,6 +271,7 @@
   </div>
 
   <div id="result-screen">
+    <div id="result-badge">👑</div>
     <div id="result-title">-</div>
     <div id="new-best-tag">自己ベスト更新!</div>
     <div id="result-rarity">-</div>
@@ -437,6 +448,7 @@
   const startScreen = $("start-screen");
   const battleScreen = $("battle-screen");
   const resultScreen = $("result-screen");
+  const resultBadge = $("result-badge");
   const stageLabel = $("stage-label");
   const arena = $("arena");
   const enemyFighter = $("enemy");
@@ -777,6 +789,12 @@
       { opacity: 1, offset: 0.35 },
       { opacity: 0, offset: 1 },
     ],
+    // #52: 魔王撃破時の戴冠バッジ。落ちてきて弾む程度に留め、長尺・多重効果は避ける
+    crownEnter: [
+      { opacity: 0, transform: "translateY(-16px) scale(0.5) rotate(-10deg)", offset: 0 },
+      { opacity: 1, transform: "translateY(4px) scale(1.15) rotate(4deg)", offset: 0.6 },
+      { opacity: 1, transform: "translateY(0) scale(1) rotate(0deg)", offset: 1 },
+    ],
     auraFlash: [
       { opacity: 0.55, filter: "blur(14px)", offset: 0 },
       { opacity: 1, filter: "blur(20px)", offset: 0.4 },
@@ -957,6 +975,9 @@
       battleScreen.style.display = "none";
       battleScreen.classList.remove(exitClass);
       resultScreen.style.display = "flex";
+      // #52: 魔王撃破時のみ専用の後光・バッジを出す。resultScreenは
+      // run間で使い回すため、敗北時は明示的に外す
+      resultScreen.classList.toggle("cleared", cleared);
       const enterClass = cleared ? "result-enter-clear" : "result-enter-defeat";
       resultScreen.classList.add(enterClass);
       resultScreen.addEventListener(
@@ -964,6 +985,7 @@
         () => resultScreen.classList.remove(enterClass),
         { once: true }
       );
+      if (cleared) pulse(resultBadge, 700, "crownEnter");
     }, 200);
   }
 
